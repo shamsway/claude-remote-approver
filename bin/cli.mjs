@@ -20,7 +20,7 @@ import { ASK } from "../src/hook.mjs";
 
 export async function main(args, deps) {
   if (args.includes("--help") || args.includes("-h")) {
-    deps.stdout.write("Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n");
+    deps.stdout.write("Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  stop        Stop the background SSE listener\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n");
     return;
   }
   if (args.includes("--version") || args.includes("-v")) {
@@ -32,7 +32,17 @@ export async function main(args, deps) {
 
   switch (command) {
     case "setup": {
-      const result = await deps.runSetup(deps);
+      const allowInsecure = args.includes("--allow-insecure");
+      const originalLoadConfig = deps.loadConfig;
+      const wrappedLoadConfig = allowInsecure
+        ? (...a) => { const c = originalLoadConfig(...a); c.allowInsecure = true; return c; }
+        : originalLoadConfig;
+      const result = await deps.runSetup({
+        ...deps,
+        loadConfig: wrappedLoadConfig,
+        validateToken: deps.validateToken,
+        stderr: deps.stderr,
+      });
       deps.stdout.write(`Setup complete. Topic: ${result.topic}\n\n`);
 
       try {
@@ -205,7 +215,7 @@ export async function main(args, deps) {
 
     default: {
       deps.stderr.write(
-        "Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n",
+        "Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  stop        Stop the background SSE listener\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n",
       );
       deps.exit(1);
       break;
@@ -234,7 +244,7 @@ if (isMain) {
   const { loadConfig, saveConfig, generateTopic } = await import(
     "../src/config.mjs"
   );
-  const { sendNotification, waitForResponse, formatToolInfo } = await import(
+  const { sendNotification, waitForResponse, formatToolInfo, validateToken } = await import(
     "../src/ntfy.mjs"
   );
   const { processHook } = await import("../src/hook.mjs");
@@ -264,6 +274,7 @@ if (isMain) {
     sendNotification,
     waitForResponse,
     formatToolInfo,
+    validateToken,
     processHook,
     processNotify,
     generateContext,

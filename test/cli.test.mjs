@@ -1102,4 +1102,136 @@ describe("main", () => {
       );
     });
   });
+
+  // =========================================================================
+  // setup --allow-insecure flag
+  // =========================================================================
+
+  describe("setup --allow-insecure flag", () => {
+    it("should call runSetup when --allow-insecure is passed alongside setup", async () => {
+      const deps = createDeps();
+
+      await main(["setup", "--allow-insecure"], deps);
+
+      assert.equal(
+        deps.runSetup.mock.callCount(),
+        1,
+        "runSetup should be called exactly once when --allow-insecure is provided",
+      );
+    });
+
+    it("should wrap loadConfig so returned config has allowInsecure: true when --allow-insecure is passed", async () => {
+      let capturedDeps;
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        runSetup: mock.fn(async (d) => {
+          capturedDeps = d;
+          // Call the wrapped loadConfig and return a realistic result
+          d.loadConfig();
+          return {
+            topic: "cra-generated123",
+            ntfyServer: "https://ntfy.sh",
+            configPath: "/home/user/.claude-remote-approver.json",
+            settingsPath: "/home/user/.claude/settings.json",
+          };
+        }),
+      });
+
+      await main(["setup", "--allow-insecure"], deps);
+
+      assert.ok(capturedDeps, "runSetup should have been called with a deps object");
+      // The wrapped loadConfig should return config with allowInsecure: true
+      const configResult = capturedDeps.loadConfig();
+      assert.equal(
+        configResult.allowInsecure,
+        true,
+        `loadConfig wrapped for --allow-insecure should return allowInsecure: true, got: ${configResult.allowInsecure}`,
+      );
+    });
+
+    it("should pass validateToken to runSetup", async () => {
+      let capturedDeps;
+      const stdout = createMockWriter();
+      const validateToken = mock.fn(async () => ({ valid: true }));
+      const deps = createDeps({
+        stdout,
+        validateToken,
+        runSetup: mock.fn(async (d) => {
+          capturedDeps = d;
+          return {
+            topic: "cra-generated123",
+            ntfyServer: "https://ntfy.sh",
+            configPath: "/home/user/.claude-remote-approver.json",
+            settingsPath: "/home/user/.claude/settings.json",
+          };
+        }),
+      });
+
+      await main(["setup"], deps);
+
+      assert.ok(capturedDeps, "runSetup should have been called");
+      assert.equal(
+        capturedDeps.validateToken,
+        validateToken,
+        "runSetup should receive validateToken from deps",
+      );
+    });
+
+    it("should pass stderr to runSetup", async () => {
+      let capturedDeps;
+      const stdout = createMockWriter();
+      const stderr = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        stderr,
+        runSetup: mock.fn(async (d) => {
+          capturedDeps = d;
+          return {
+            topic: "cra-generated123",
+            ntfyServer: "https://ntfy.sh",
+            configPath: "/home/user/.claude-remote-approver.json",
+            settingsPath: "/home/user/.claude/settings.json",
+          };
+        }),
+      });
+
+      await main(["setup"], deps);
+
+      assert.ok(capturedDeps, "runSetup should have been called");
+      assert.equal(
+        capturedDeps.stderr,
+        stderr,
+        "runSetup should receive stderr from deps",
+      );
+    });
+
+    it("should NOT set allowInsecure when --allow-insecure is not passed", async () => {
+      let capturedDeps;
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        runSetup: mock.fn(async (d) => {
+          capturedDeps = d;
+          d.loadConfig();
+          return {
+            topic: "cra-generated123",
+            ntfyServer: "https://ntfy.sh",
+            configPath: "/home/user/.claude-remote-approver.json",
+            settingsPath: "/home/user/.claude/settings.json",
+          };
+        }),
+      });
+
+      await main(["setup"], deps);
+
+      assert.ok(capturedDeps, "runSetup should have been called");
+      const configResult = capturedDeps.loadConfig();
+      assert.notEqual(
+        configResult.allowInsecure,
+        true,
+        "loadConfig should NOT set allowInsecure: true when --allow-insecure is not passed",
+      );
+    });
+  });
 });
