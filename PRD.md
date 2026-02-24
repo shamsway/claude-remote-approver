@@ -1,9 +1,10 @@
 # PRD: Expanded Notification & Interaction Support
 
-## Status: Draft (Rev 2)
+## Status: Phases 1-3 Complete (Rev 3)
 ## Author: Generated from codebase analysis + research
-## Date: 2026-02-24
+## Date: 2026-02-24 (updated 2026-02-24)
 ## Primary deployment target: Self-hosted ntfy
+## Current version: v0.7.0 (branch: add-notifications)
 
 ---
 
@@ -44,7 +45,7 @@ GitHub issues on the Claude Code repo (#15872, #12605, #10168, #13024) show dema
 
 ---
 
-## 4. Feature 0: Self-Hosted ntfy Auth Token Support
+## 4. Feature 0: Self-Hosted ntfy Auth Token Support ✅ COMPLETE
 
 ### 4.1 Problem
 
@@ -113,9 +114,9 @@ The `?auth=` value is `base64_raw("Bearer tk_...")` (standard base64 with traili
 - **Token scope**: ntfy tokens currently grant full user-level access (not per-topic). Users should create a dedicated ntfy user with ACL entries scoped to `cra-*` topics only.
 - **HTTPS required**: Bearer tokens are transmitted in cleartext over HTTP. The setup flow should warn (or refuse) if the server URL is `http://` without `localhost`.
 
-### 4.6 Config Changes
+### 4.6 Config Changes ✅
 
-Add an optional `authToken` field:
+Added `authToken` field plus `CCR_NTFY_TOPIC`, `CCR_NTFY_SERVER`, `CCR_NTFY_TOKEN` env var overrides:
 
 ```json
 {
@@ -129,16 +130,15 @@ Add an optional `authToken` field:
 
 When `authToken` is present, all three call sites inject it. When absent, behavior is unchanged (unauthenticated, compatible with ntfy.sh cloud).
 
-### 4.7 Setup Flow Changes
+### 4.7 Setup Flow Changes ⏳ PARTIAL
 
-The `setup` command should:
+The `setup` command currently uses env vars or config file for auth. The following interactive setup enhancements are NOT yet implemented:
 
-1. Prompt for ntfy server URL (existing)
-2. **New**: Ask if the server requires authentication
-3. If yes, prompt for the access token (`tk_...`)
-4. **New**: Validate the token by attempting a publish + subscribe round-trip to a test topic
-5. If validation fails, show the error and suggest checking the token and server ACLs
-6. If the server URL is `http://` (not HTTPS, not localhost), warn that tokens will be sent in cleartext
+1. ~~Prompt for ntfy server URL~~ (uses config/env vars)
+2. **TODO**: Interactive auth token prompt during setup
+3. **TODO**: Validate the token by attempting a publish + subscribe round-trip to a test topic
+4. **TODO**: If validation fails, show the error and suggest checking the token and server ACLs
+5. **TODO**: If the server URL is `http://` (not HTTPS, not localhost), warn/refuse with config override
 
 ### 4.8 Recommended Server-Side ACL Setup
 
@@ -162,7 +162,7 @@ auth-file: /var/lib/ntfy/user.db
 auth-default-access: deny-all
 ```
 
-### 4.9 Code Changes
+### 4.9 Code Changes ✅
 
 **`src/ntfy.mjs`** — `sendNotification()` and `waitForResponse()`:
 ```javascript
@@ -198,17 +198,17 @@ function buildActions(server, topic, requestId, { permissionSuggestions, authTok
 }
 ```
 
-### 4.10 Testing
+### 4.10 Testing ✅ (partial)
 
-- Test that `authToken` is included in fetch headers for publish and subscribe
-- Test that `authToken` is included in action button definitions when present
-- Test that no auth headers are sent when `authToken` is absent (backward compat)
-- Test setup validation round-trip (mock fetch for success/401 scenarios)
-- Test `http://` non-localhost warning
+- ✅ Test that `authToken` is included in fetch headers for publish and subscribe
+- ✅ Test that `authToken` is included in action button definitions when present
+- ✅ Test that no auth headers are sent when `authToken` is absent (backward compat)
+- ⏳ Test setup validation round-trip (mock fetch for success/401 scenarios) — NOT YET (setup validation not implemented)
+- ⏳ Test `http://` non-localhost warning — NOT YET (HTTPS enforcement not implemented)
 
 ---
 
-## 5. Feature 1: Non-Interactive Notification Hooks
+## 5. Feature 1: Non-Interactive Notification Hooks ✅ COMPLETE
 
 ### 5.1 Overview
 
@@ -329,7 +329,7 @@ For notification-only messages, leverage additional ntfy.sh features not current
 - **`markdown`**: Enable for tool failure messages that may contain code
 - **`click`**: Could link to the Claude Code web UI or relevant docs (stretch goal)
 
-### 5.8 `Stop` Hook: "Continue" Action
+### 5.8 `Stop` Hook: "Continue" Action ⏳ NOT YET IMPLEMENTED
 
 The `Stop` hook is special — it supports blocking. When Claude finishes, the notification could include a single action button:
 
@@ -343,7 +343,7 @@ This should be a separate config flag (`notifications.stopWithContinue: false` d
 
 ---
 
-## 6. Feature 2: Expanded Multi-Choice Question Flow
+## 6. Feature 2: Expanded Multi-Choice Question Flow ⏳ PARTIAL
 
 ### 6.1 Current Limitations
 
@@ -378,7 +378,7 @@ If the user doesn't tap any button in batch 1, they can request more options. Bu
 - Bolding the question text (with `markdown: true`)
 - Adding a "Skip to CLI" button on each batch that returns `behavior: "ask"` so the user can answer via CLI instead
 
-#### 6.2.2 Multi-Select Support
+#### 6.2.2 Multi-Select Support ⏳ NOT YET IMPLEMENTED
 
 For `multiSelect: true` questions, the current implementation needs to collect multiple taps before returning. Proposed flow:
 
@@ -418,7 +418,7 @@ return { answers };
 
 **Confirmation notification:** After each tap, send a brief follow-up notification showing current selections: `"Selected: Option A, Option C. Tap Done to confirm."`
 
-#### 6.2.3 "Answer on CLI" Fallback Button
+#### 6.2.3 "Answer on CLI" Fallback Button ✅ COMPLETE
 
 For every question notification, add an action button that triggers fallback to the CLI prompt:
 
@@ -437,9 +437,9 @@ When `useCLI: true` is received, return `{ behavior: "ask" }` so Claude Code fal
 
 **Button budget:** This consumes 1 of 3 available buttons per notification. For questions with ≤2 options, all three slots are available (2 options + 1 "Use CLI"). For questions with 3+ options, batching already handles overflow, so "Use CLI" replaces one option slot in the last batch.
 
-#### 6.2.4 Multi-Question Sequences
+#### 6.2.4 Multi-Question Sequences ✅ COMPLETE (was already implemented, tests added)
 
-`AskUserQuestion` can include 1-4 questions in a single call. Currently the code processes the first question only. Expand to handle the full sequence:
+`AskUserQuestion` can include 1-4 questions in a single call. The code processes all questions sequentially:
 
 1. Process questions sequentially — send notification for question 1, wait for answer, then question 2, etc.
 2. Accumulate answers into the `answers` map: `{ "Question 1 text?": "Answer", "Question 2 text?": "Answer" }`
@@ -447,7 +447,7 @@ When `useCLI: true` is received, return `{ behavior: "ask" }` so Claude Code fal
 
 **Timeout handling:** Each question gets the full timeout window. If any question times out, fall back to CLI for the entire set.
 
-#### 6.2.5 Preview Content Support
+#### 6.2.5 Preview Content Support ✅ COMPLETE
 
 Claude Code's `AskUserQuestion` supports `markdown` preview content on options (shown in a side-by-side layout in the CLI). Since ntfy.sh supports markdown rendering, include preview content in the notification body when available:
 
@@ -477,7 +477,7 @@ Set `markdown: true` on these notifications.
 
 ---
 
-## 7. Feature 3: Rich Notification Formatting
+## 7. Feature 3: Rich Notification Formatting ✅ COMPLETE
 
 ### 7.1 Markdown Support in Notifications
 
@@ -676,34 +676,35 @@ function createMultiEventSSEStream(events) {
 
 ## 11. Rollout Plan
 
-### Phase 1: Auth Token Support + System Prompt
-- Add `authToken` to config schema with backward-compatible defaults
-- Thread auth through `sendNotification()`, `waitForResponse()`, `buildActions()`, `buildQuestionActions()`
-- Update `setup` flow with auth prompts and validation round-trip
-- Document recommended server-side ACL setup
-- Add `context` command and `SessionStart` hook for system prompt injection
-- Add `prompt` command for printable CLAUDE.md snippet
-- Ship as v0.7.0
+### Phase 1: Auth Token Support + System Prompt ✅ SHIPPED (v0.7.0)
+- ✅ Add `authToken` to config schema with backward-compatible defaults
+- ✅ Thread auth through `sendNotification()`, `waitForResponse()`, `buildActions()`, `buildQuestionActions()`
+- ✅ Add `CCR_NTFY_TOPIC`, `CCR_NTFY_SERVER`, `CCR_NTFY_TOKEN` env var overrides
+- ✅ Add `context` command and `SessionStart` hook for system prompt injection
+- ✅ Add `prompt` command for printable system prompt text
+- ⏳ Interactive `setup` flow with auth prompts and validation round-trip — deferred
+- ⏳ HTTPS enforcement with config override — deferred
 
-### Phase 2: Non-Interactive Notifications
-- Add `notify` command and `processNotify()`
-- Add `formatNotification()` with priority/tags
-- Extend `sendNotification()` with priority/tags/markdown
-- Extend config schema with `notifications` settings
-- Extend `setup` to register notification hooks
-- Ship as v0.8.0
+### Phase 2: Non-Interactive Notifications ✅ SHIPPED (v0.7.0, combined with Phase 1)
+- ✅ Add `notify` command and `processNotify()` in new `src/notify.mjs`
+- ✅ Add `formatNotification()` with priority/tags for all 6 event types
+- ✅ Extend `sendNotification()` with priority/tags/markdown
+- ✅ Extend config schema with `notifications` settings
+- ✅ Extend `setup` to register notification hooks via `registerNotificationHooks()`
+- ✅ Add `unregisterAllHooks()` for clean disable/uninstall of all hook types
+- ✅ Updated `status` command to show auth and notification config
 
-### Phase 3: Question Flow Improvements
-- "Use CLI" fallback button on all question notifications
-- Multi-question sequence support (process all questions, not just first)
-- Markdown rendering for question content
-- Ship as v0.9.0
+### Phase 3: Question Flow Improvements ✅ SHIPPED (v0.7.0, combined with Phases 1-2)
+- ✅ "Use CLI" fallback button on last batch of question notifications
+- ✅ Multi-question sequence support verified with tests
+- ✅ Markdown preview content in question notifications
+- ⏳ Smarter option batching with navigation labels ("Options 1-3 of 7") — deferred
 
-### Phase 4: Multi-Select & Continue
+### Phase 4: Multi-Select & Continue ⏳ NOT STARTED
 - Multi-select answer accumulation in `waitForResponse()`
 - Confirmation notifications showing current selections
-- "Continue" button on Stop notifications
-- Ship as v0.10.0
+- "Continue" button on Stop notifications (`stopWithContinue` config)
+- Ship as v0.8.0
 
 ---
 
@@ -723,7 +724,7 @@ function createMultiEventSSEStream(events) {
 
 ---
 
-## 13. Feature 4: Claude Code System Prompt for Remote Awareness
+## 13. Feature 4: Claude Code System Prompt for Remote Awareness ✅ COMPLETE
 
 ### 13.1 Problem
 
