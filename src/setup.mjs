@@ -55,11 +55,22 @@ export function getContextCommand() {
 }
 
 /**
+ * Returns the stop command string: `node <absolute_path_to_bin/cli.mjs> stop`
+ */
+export function getStopCommand() {
+  const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "cli.mjs");
+  if (!fs.existsSync(cliPath)) {
+    throw new Error(`CLI entry point not found: ${cliPath}`);
+  }
+  return `node "${cliPath}" stop`;
+}
+
+/**
  * Registers notification hooks and a context hook in Claude's settings.json.
  * Only registers hooks for enabled notification types.
  * Always registers the SessionStart context hook when contextCommand is provided.
  */
-export function registerNotificationHooks(settingsPath, notifyCommand, notifications, contextCommand) {
+export function registerNotificationHooks(settingsPath, notifyCommand, notifications, contextCommand, stopCommand) {
   let settings = {};
   try {
     settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
@@ -87,11 +98,16 @@ export function registerNotificationHooks(settingsPath, notifyCommand, notificat
   for (const [configKey, hookEvent] of Object.entries(NOTIFICATION_HOOK_EVENTS)) {
     if (!notifications[configKey]) continue;
 
+    // Use stop command for Stop event when stopWithContinue is enabled
+    const command = (configKey === "stop" && notifications.stopWithContinue && stopCommand)
+      ? stopCommand
+      : notifyCommand;
+
     if (!Array.isArray(settings.hooks[hookEvent])) {
       settings.hooks[hookEvent] = [];
     }
     const existingIdx = settings.hooks[hookEvent].findIndex(isCraEntry);
-    const entry = { hooks: [{ type: "command", command: notifyCommand }] };
+    const entry = { hooks: [{ type: "command", command: command }] };
     if (existingIdx >= 0) {
       settings.hooks[hookEvent][existingIdx] = entry;
     } else {
@@ -258,7 +274,8 @@ export async function runSetup({
   // Register notification hooks and context hook
   const notifyCommand = getNotifyCommand();
   const contextCommand = getContextCommand();
-  registerNotificationHooks(settingsPath, notifyCommand, config.notifications || {}, contextCommand);
+  const stopCommand = getStopCommand();
+  registerNotificationHooks(settingsPath, notifyCommand, config.notifications || {}, contextCommand, stopCommand);
 
   return { topic, ntfyServer: config.ntfyServer, configPath, settingsPath };
 }

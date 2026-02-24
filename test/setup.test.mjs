@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks, registerNotificationHooks, getNotifyCommand, getContextCommand } from "../src/setup.mjs";
+import { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks, registerNotificationHooks, getNotifyCommand, getContextCommand, getStopCommand } from "../src/setup.mjs";
 import { DEFAULT_CONFIG } from "../src/config.mjs";
 
 // ===========================================================================
@@ -1051,5 +1051,121 @@ describe("runSetup notification hooks", () => {
     assert.ok(settings.hooks.PostToolUseFailure, "should have PostToolUseFailure hook");
     assert.ok(settings.hooks.SessionStart, "should have SessionStart hook for context");
     assert.equal(settings.hooks.SessionEnd, undefined, "should not have SessionEnd hook");
+  });
+});
+
+// ===========================================================================
+// getStopCommand
+// ===========================================================================
+
+describe("getStopCommand", () => {
+  it("should return a string", () => {
+    const cmd = getStopCommand();
+    assert.equal(typeof cmd, "string");
+  });
+
+  it("should contain cli.mjs in the path", () => {
+    const cmd = getStopCommand();
+    assert.ok(cmd.includes("cli.mjs"), `Command should include "cli.mjs", got: "${cmd}"`);
+  });
+
+  it("should end with the 'stop' subcommand argument", () => {
+    const cmd = getStopCommand();
+    assert.ok(cmd.endsWith(" stop"), `Command should end with " stop", got: "${cmd}"`);
+  });
+
+  it("should start with 'node '", () => {
+    const cmd = getStopCommand();
+    assert.ok(cmd.startsWith("node "), `Command should start with "node ", got: "${cmd}"`);
+  });
+});
+
+// ===========================================================================
+// registerNotificationHooks — conditional Stop command
+// ===========================================================================
+
+describe("registerNotificationHooks — conditional Stop command", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-stop-cmd-test-"));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should use stopCommand for Stop hook when stopWithContinue is true and stop is enabled", () => {
+    const settingsPath = path.join(tmpDir, "stop-with-continue-true.json");
+    const notifyCommand = 'node "/path/to/cli.mjs" notify';
+    const stopCommand = 'node "/path/to/cli.mjs" stop';
+    registerNotificationHooks(
+      settingsPath,
+      notifyCommand,
+      { stop: true, stopWithContinue: true },
+      undefined,
+      stopCommand
+    );
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(Array.isArray(settings.hooks.Stop), "Stop hook should be registered");
+    assert.equal(settings.hooks.Stop.length, 1);
+    assert.equal(
+      settings.hooks.Stop[0].hooks[0].command,
+      stopCommand,
+      "Stop hook should use the stopCommand when stopWithContinue is true"
+    );
+  });
+
+  it("should use notifyCommand for Stop hook when stopWithContinue is false", () => {
+    const settingsPath = path.join(tmpDir, "stop-with-continue-false.json");
+    const notifyCommand = 'node "/path/to/cli.mjs" notify';
+    const stopCommand = 'node "/path/to/cli.mjs" stop';
+    registerNotificationHooks(
+      settingsPath,
+      notifyCommand,
+      { stop: true, stopWithContinue: false },
+      undefined,
+      stopCommand
+    );
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(Array.isArray(settings.hooks.Stop), "Stop hook should be registered");
+    assert.equal(
+      settings.hooks.Stop[0].hooks[0].command,
+      notifyCommand,
+      "Stop hook should use notifyCommand when stopWithContinue is false"
+    );
+  });
+
+  it("should use notifyCommand for Stop hook when stopWithContinue is true but stopCommand is not provided", () => {
+    const settingsPath = path.join(tmpDir, "stop-no-stop-command.json");
+    const notifyCommand = 'node "/path/to/cli.mjs" notify';
+    registerNotificationHooks(
+      settingsPath,
+      notifyCommand,
+      { stop: true, stopWithContinue: true }
+      // no contextCommand, no stopCommand
+    );
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(Array.isArray(settings.hooks.Stop), "Stop hook should be registered");
+    assert.equal(
+      settings.hooks.Stop[0].hooks[0].command,
+      notifyCommand,
+      "Stop hook should fall back to notifyCommand when stopCommand is not provided"
+    );
+  });
+
+  it("should not register Stop hook when stop is disabled entirely", () => {
+    const settingsPath = path.join(tmpDir, "stop-disabled.json");
+    const notifyCommand = 'node "/path/to/cli.mjs" notify';
+    const stopCommand = 'node "/path/to/cli.mjs" stop';
+    registerNotificationHooks(
+      settingsPath,
+      notifyCommand,
+      { stop: false, stopWithContinue: true },
+      undefined,
+      stopCommand
+    );
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(settings.hooks?.Stop, undefined, "Stop hook should not be registered when stop is false");
   });
 });
