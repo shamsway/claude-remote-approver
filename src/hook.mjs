@@ -88,9 +88,9 @@ export function isAskUserQuestion(input) {
  * @param {string} [opts.authToken] - When provided, adds Authorization header to each action
  * @returns {Array<object>} Array of action objects
  */
-export function buildQuestionActions(server, topic, requestId, options, { authToken } = {}) {
+export function buildQuestionActions(server, topic, requestId, options, { authToken, includeCliButton } = {}) {
   const url = `${server}/${topic}-response`;
-  return options.map((opt) => {
+  const actions = options.map((opt) => {
     const action = {
       action: "http",
       label: opt.label,
@@ -103,6 +103,22 @@ export function buildQuestionActions(server, topic, requestId, options, { authTo
     }
     return action;
   });
+
+  if (includeCliButton) {
+    const cliAction = {
+      action: "http",
+      label: "Use CLI",
+      url,
+      body: JSON.stringify({ requestId, answer: "__USE_CLI__", useCLI: true }),
+      method: "POST",
+    };
+    if (authToken) {
+      cliAction.headers = { Authorization: `Bearer ${authToken}` };
+    }
+    actions.push(cliAction);
+  }
+
+  return actions;
 }
 
 /**
@@ -116,6 +132,9 @@ export function buildQuestionMessage(question, options, opts = {}) {
   msg += "\n\n";
   for (const opt of options) {
     msg += `• ${opt.label}: ${opt.description}\n`;
+    if (opt.markdown) {
+      msg += `${opt.markdown}\n`;
+    }
   }
   return msg.trimEnd();
 }
@@ -142,8 +161,12 @@ export async function processAskUserQuestion(input, deps) {
 
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
+      const isLastBatch = i === batches.length - 1;
       const batchInfo = batches.length > 1 ? `(${i + 1}/${batches.length})` : undefined;
-      const actions = buildQuestionActions(config.ntfyServer, config.topic, requestId, batch, { authToken: config.authToken });
+      const actions = buildQuestionActions(config.ntfyServer, config.topic, requestId, batch, {
+        authToken: config.authToken,
+        includeCliButton: isLastBatch,
+      });
       const message = buildQuestionMessage(q.question, batch, { multiSelect: q.multiSelect, batchInfo });
 
       const sent = await sendWithRetry(deps.sendNotification, {
@@ -173,6 +196,9 @@ export async function processAskUserQuestion(input, deps) {
       return ASK;
     }
 
+    if (response.answer === "__USE_CLI__") {
+      return ASK;
+    }
     if (response.answer) {
       answers[q.question] = response.answer;
     } else {

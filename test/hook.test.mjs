@@ -1023,6 +1023,17 @@ describe("buildQuestionMessage", () => {
     const msg = buildQuestionMessage("Pick", [{ label: "A", description: "a" }], { batchInfo: "(1/2)" });
     assert.ok(msg.includes("(1/2)"), `Should include batch info, got: ${msg}`);
   });
+
+  it("should include option markdown/preview content in question message when available", () => {
+    const options = [
+      { label: "A", description: "Sidebar layout", markdown: "```\n┌─────┐\n│ Side│\n└─────┘\n```" },
+      { label: "B", description: "Top nav" },
+    ];
+    const message = buildQuestionMessage("Which layout?", options, {});
+    assert.ok(message.includes("Sidebar layout"));
+    assert.ok(message.includes("┌─────┐"), "should include markdown preview content");
+    assert.ok(message.includes("Top nav"));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1375,5 +1386,145 @@ describe("processAskUserQuestion", () => {
     for (const action of sendCalls[0].actions) {
       assert.deepEqual(action.headers, { Authorization: "Bearer tk_test123" });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 14: Use CLI fallback button
+// ---------------------------------------------------------------------------
+
+describe("Use CLI fallback button", () => {
+  it("should include a 'Use CLI' action in question actions when includeCliButton is true", () => {
+    const options = [
+      { label: "A", description: "First" },
+      { label: "B", description: "Second" },
+    ];
+    const actions = buildQuestionActions("https://ntfy.sh", "my-topic", "req-cli", options, { includeCliButton: true });
+    const cliAction = actions.find(a => a.label === "Use CLI");
+    assert.ok(cliAction, "should have a 'Use CLI' action");
+    const body = JSON.parse(cliAction.body);
+    assert.equal(body.useCLI, true);
+    assert.equal(body.answer, "__USE_CLI__");
+  });
+
+  it("should not include 'Use CLI' action when includeCliButton is false", () => {
+    const options = [{ label: "A", description: "First" }];
+    const actions = buildQuestionActions("https://ntfy.sh", "my-topic", "req-nocli", options);
+    const cliAction = actions.find(a => a.label === "Use CLI");
+    assert.equal(cliAction, undefined);
+  });
+
+  it("processAskUserQuestion should return ASK when __USE_CLI__ response is received", async () => {
+    const input = {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [{
+          question: "Which?",
+          header: "Choice",
+          options: [{ label: "A", description: "First" }],
+          multiSelect: false,
+        }],
+      },
+    };
+
+    const result = await processAskUserQuestion(input, {
+      loadConfig: () => ({ topic: "t", ntfyServer: "https://ntfy.sh", timeout: 120, authToken: "" }),
+      sendNotification: async () => ({ ok: true }),
+      waitForResponse: async () => ({ answer: "__USE_CLI__" }),
+    });
+
+    assert.equal(result.hookSpecificOutput.decision.behavior, "ask");
+  });
+
+  it("should include Use CLI button only in the last batch", async () => {
+    const sendCalls = [];
+    const input = {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [{
+          question: "Pick one?",
+          header: "Choice",
+          options: [
+            { label: "A", description: "1" },
+            { label: "B", description: "2" },
+            { label: "C", description: "3" },
+            { label: "D", description: "4" },
+          ],
+          multiSelect: false,
+        }],
+      },
+    };
+
+    await processAskUserQuestion(input, {
+      loadConfig: () => ({ topic: "t", ntfyServer: "https://ntfy.sh", timeout: 120, authToken: "" }),
+      sendNotification: async (params) => { sendCalls.push(params); return { ok: true }; },
+      waitForResponse: async () => ({ answer: "A" }),
+    });
+
+    // First batch (A, B, C) should NOT have Use CLI
+    const firstBatchActions = sendCalls[0].actions;
+    assert.equal(firstBatchActions.find(a => a.label === "Use CLI"), undefined);
+
+    // Second batch (D) should have Use CLI
+    const lastBatchActions = sendCalls[1].actions;
+    assert.ok(lastBatchActions.find(a => a.label === "Use CLI"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 15: Multi-question sequence tests
+// ---------------------------------------------------------------------------
+
+describe("multi-question sequences", () => {
+  it("should process all questions sequentially and return answers for each", async () => {
+    const input = {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [
+          { question: "Q1?", header: "H1", options: [{ label: "A1", description: "D1" }], multiSelect: false },
+          { question: "Q2?", header: "H2", options: [{ label: "B1", description: "D2" }], multiSelect: false },
+        ],
+      },
+    };
+
+    let callNum = 0;
+    const result = await processAskUserQuestion(input, {
+      loadConfig: () => ({ topic: "t", ntfyServer: "https://ntfy.sh", timeout: 120, authToken: "" }),
+      sendNotification: async () => ({ ok: true }),
+      waitForResponse: async () => {
+        callNum++;
+        return { answer: callNum === 1 ? "A1" : "B1" };
+      },
+    });
+
+    assert.equal(result.hookSpecificOutput.decision.behavior, "allow");
+    const answers = result.hookSpecificOutput.decision.updatedInput.answers;
+    assert.equal(answers["Q1?"], "A1");
+    assert.equal(answers["Q2?"], "B1");
+  });
+
+  it("should fall back to CLI if any question times out", async () => {
+    const input = {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [
+          { question: "Q1?", header: "H1", options: [{ label: "A1", description: "D1" }], multiSelect: false },
+          { question: "Q2?", header: "H2", options: [{ label: "B1", description: "D2" }], multiSelect: false },
+        ],
+      },
+    };
+
+    let callNum = 0;
+    const result = await processAskUserQuestion(input, {
+      loadConfig: () => ({ topic: "t", ntfyServer: "https://ntfy.sh", timeout: 120, authToken: "" }),
+      sendNotification: async () => ({ ok: true }),
+      waitForResponse: async () => {
+        callNum++;
+        if (callNum === 2) return { timeout: true };
+        return { answer: "A1" };
+      },
+    });
+
+    assert.equal(result.hookSpecificOutput.decision.behavior, "ask");
   });
 });
