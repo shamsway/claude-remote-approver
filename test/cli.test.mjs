@@ -79,6 +79,10 @@ function createDeps(overrides = {}) {
           hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } },
         },
     ),
+    processNotify: mock.fn(async () => {}),
+    generateContext: mock.fn(() => ({
+      hookSpecificOutput: { additionalContext: "Remote approval context..." },
+    })),
     runSetup: mock.fn(
       async () =>
         overrides.setupResult ?? {
@@ -861,6 +865,108 @@ describe("main", () => {
         output.includes("uninstall"),
         `help text should mention 'uninstall', got: ${output}`,
       );
+    });
+  });
+
+  // =========================================================================
+  // notify subcommand
+  // =========================================================================
+
+  describe("notify subcommand", () => {
+    it("should read JSON from stdin and call processNotify", async () => {
+      const notifyInput = { hook_event_name: "Stop" };
+      const stdout = createMockWriter();
+      const processNotify = mock.fn(async () => {});
+      const deps = createDeps({
+        stdin: JSON.stringify(notifyInput),
+        stdout,
+        processNotify,
+      });
+
+      await main(["notify"], deps);
+
+      assert.equal(processNotify.mock.callCount(), 1);
+      const callArgs = processNotify.mock.calls[0].arguments[0];
+      assert.equal(callArgs.hook_event_name, "Stop");
+    });
+
+    it("should not write anything to stdout on success", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdin: JSON.stringify({ hook_event_name: "Stop" }),
+        stdout,
+        processNotify: mock.fn(async () => {}),
+      });
+
+      await main(["notify"], deps);
+      assert.equal(stdout.output(), "");
+    });
+
+    it("should not crash on malformed JSON stdin", async () => {
+      const stderr = createMockWriter();
+      const deps = createDeps({
+        stdin: "not-json{{{",
+        stderr,
+        processNotify: mock.fn(async () => {}),
+      });
+
+      await assert.doesNotReject(async () => {
+        await main(["notify"], deps);
+      });
+    });
+
+    it("should not crash when processNotify throws", async () => {
+      const stderr = createMockWriter();
+      const deps = createDeps({
+        stdin: JSON.stringify({ hook_event_name: "Stop" }),
+        stderr,
+        processNotify: mock.fn(async () => { throw new Error("notify failed"); }),
+      });
+
+      await assert.doesNotReject(async () => {
+        await main(["notify"], deps);
+      });
+    });
+  });
+
+  // =========================================================================
+  // context subcommand
+  // =========================================================================
+
+  describe("context subcommand", () => {
+    it("should output JSON with hookSpecificOutput.additionalContext", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({ stdout });
+      await main(["context"], deps);
+      const output = stdout.output();
+      const parsed = JSON.parse(output);
+      assert.equal(typeof parsed.hookSpecificOutput.additionalContext, "string");
+    });
+
+    it("should load config for context generation", async () => {
+      const deps = createDeps();
+      await main(["context"], deps);
+      assert.equal(deps.loadConfig.mock.callCount(), 1);
+    });
+  });
+
+  // =========================================================================
+  // prompt subcommand
+  // =========================================================================
+
+  describe("prompt subcommand", () => {
+    it("should output the system prompt text to stdout", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        generateContext: mock.fn(() => ({
+          hookSpecificOutput: { additionalContext: "Remote Approval Context with push notification info" },
+        })),
+      });
+      await main(["prompt"], deps);
+      const output = stdout.output();
+      assert.ok(output.includes("Remote Approval Context"));
+      assert.ok(output.includes("push notification"));
     });
   });
 

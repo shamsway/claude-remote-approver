@@ -20,7 +20,7 @@ import { ASK } from "../src/hook.mjs";
 
 export async function main(args, deps) {
   if (args.includes("--help") || args.includes("-h")) {
-    deps.stdout.write("Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  hook        Process a Claude Code hook (internal)\n");
+    deps.stdout.write("Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n");
     return;
   }
   if (args.includes("--version") || args.includes("-v")) {
@@ -156,9 +156,39 @@ export async function main(args, deps) {
       break;
     }
 
+    case "notify": {
+      let input;
+      try {
+        input = JSON.parse(deps.stdin);
+      } catch {
+        deps.stderr.write("[claude-remote-approver] Invalid notify input.\n");
+        break;
+      }
+      try {
+        await deps.processNotify(input, deps);
+      } catch (err) {
+        deps.stderr.write(`[claude-remote-approver] Notify failed: ${err.message}\n`);
+      }
+      break;
+    }
+
+    case "context": {
+      const config = deps.loadConfig();
+      const result = deps.generateContext(config);
+      deps.stdout.write(JSON.stringify(result) + "\n");
+      break;
+    }
+
+    case "prompt": {
+      const config = deps.loadConfig();
+      const result = deps.generateContext(config);
+      deps.stdout.write(result.hookSpecificOutput.additionalContext + "\n");
+      break;
+    }
+
     default: {
       deps.stderr.write(
-        "Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  hook        Process a Claude Code hook (internal)\n",
+        "Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n",
       );
       deps.exit(1);
       break;
@@ -191,6 +221,8 @@ if (isMain) {
     "../src/ntfy.mjs"
   );
   const { processHook } = await import("../src/hook.mjs");
+  const { processNotify } = await import("../src/notify.mjs");
+  const { generateContext } = await import("../src/context.mjs");
   const { runSetup, registerHook, getHookCommand, unregisterHook } = await import("../src/setup.mjs");
 
   const args = process.argv.slice(2);
@@ -212,6 +244,8 @@ if (isMain) {
     waitForResponse,
     formatToolInfo,
     processHook,
+    processNotify,
+    generateContext,
     runSetup,
     registerHook,
     getHookCommand,
