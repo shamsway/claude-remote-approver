@@ -18,34 +18,31 @@ export const _internal = { delay: ms => new Promise(r => setTimeout(r, ms)) };
  * @param {string} requestId - Unique request identifier
  * @param {object} [options] - Optional settings
  * @param {string[]} [options.permissionSuggestions] - When non-empty, adds an "Always Approve" button
+ * @param {string} [options.authToken] - When provided, adds Authorization header to each action
  * @returns {Array<object>} Array of action objects
  */
-export function buildActions(server, topic, requestId, { permissionSuggestions } = {}) {
+export function buildActions(server, topic, requestId, { permissionSuggestions, authToken } = {}) {
   const url = `${server}/${topic}-response`;
+  const makeAction = (label, body) => {
+    const action = {
+      action: "http",
+      label,
+      url,
+      body: JSON.stringify(body),
+      method: "POST",
+    };
+    if (authToken) {
+      action.headers = { Authorization: `Bearer ${authToken}` };
+    }
+    return action;
+  };
+
   const actions = [
-    {
-      action: "http",
-      label: "Approve",
-      url,
-      body: JSON.stringify({ requestId, approved: true }),
-      method: "POST",
-    },
-    {
-      action: "http",
-      label: "Deny",
-      url,
-      body: JSON.stringify({ requestId, approved: false }),
-      method: "POST",
-    },
+    makeAction("Approve", { requestId, approved: true }),
+    makeAction("Deny", { requestId, approved: false }),
   ];
   if (permissionSuggestions?.length > 0) {
-    actions.splice(1, 0, {
-      action: "http",
-      label: "Always Approve",
-      url,
-      body: JSON.stringify({ requestId, approved: true, alwaysAllow: true }),
-      method: "POST",
-    });
+    actions.splice(1, 0, makeAction("Always Approve", { requestId, approved: true, alwaysAllow: true }));
   }
   return actions;
 }
@@ -82,16 +79,30 @@ export function isAskUserQuestion(input) {
 
 /**
  * Build ntfy action buttons for question options.
+ *
+ * @param {string} server - ntfy server URL
+ * @param {string} topic - ntfy topic
+ * @param {string} requestId - Unique request identifier
+ * @param {Array<object>} options - Array of option objects with label/description
+ * @param {object} [opts] - Optional settings
+ * @param {string} [opts.authToken] - When provided, adds Authorization header to each action
+ * @returns {Array<object>} Array of action objects
  */
-export function buildQuestionActions(server, topic, requestId, options) {
+export function buildQuestionActions(server, topic, requestId, options, { authToken } = {}) {
   const url = `${server}/${topic}-response`;
-  return options.map((opt) => ({
-    action: "http",
-    label: opt.label,
-    url,
-    body: JSON.stringify({ requestId, answer: opt.label }),
-    method: "POST",
-  }));
+  return options.map((opt) => {
+    const action = {
+      action: "http",
+      label: opt.label,
+      url,
+      body: JSON.stringify({ requestId, answer: opt.label }),
+      method: "POST",
+    };
+    if (authToken) {
+      action.headers = { Authorization: `Bearer ${authToken}` };
+    }
+    return action;
+  });
 }
 
 /**
@@ -132,7 +143,7 @@ export async function processAskUserQuestion(input, deps) {
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       const batchInfo = batches.length > 1 ? `(${i + 1}/${batches.length})` : undefined;
-      const actions = buildQuestionActions(config.ntfyServer, config.topic, requestId, batch);
+      const actions = buildQuestionActions(config.ntfyServer, config.topic, requestId, batch, { authToken: config.authToken });
       const message = buildQuestionMessage(q.question, batch, { multiSelect: q.multiSelect, batchInfo });
 
       const sent = await sendWithRetry(deps.sendNotification, {
@@ -142,6 +153,7 @@ export async function processAskUserQuestion(input, deps) {
         message,
         actions,
         requestId,
+        authToken: config.authToken,
       });
       if (!sent) return ASK;
     }
@@ -154,6 +166,7 @@ export async function processAskUserQuestion(input, deps) {
         topic: config.topic,
         requestId,
         timeout: config.timeout * 1000,
+        authToken: config.authToken,
       });
     } catch (err) {
       console.error("[claude-remote-approver] Response listener failed:", err.message, "— Falling back to CLI.");
@@ -208,6 +221,7 @@ export async function processHook(input, { loadConfig, sendNotification, waitFor
   const { title, message } = formatToolInfo(input);
   const actions = buildActions(config.ntfyServer, config.topic, requestId, {
     permissionSuggestions: input.permission_suggestions,
+    authToken: config.authToken,
   });
 
   const sent = await sendWithRetry(sendNotification, {
@@ -217,6 +231,7 @@ export async function processHook(input, { loadConfig, sendNotification, waitFor
     message,
     actions,
     requestId,
+    authToken: config.authToken,
   });
   if (!sent) return ASK;
 
@@ -229,6 +244,7 @@ export async function processHook(input, { loadConfig, sendNotification, waitFor
       topic: config.topic,
       requestId,
       timeout,
+      authToken: config.authToken,
     });
   } catch (err) {
     console.error("[claude-remote-approver] Response listener failed:", err.message, "— Falling back to CLI.");

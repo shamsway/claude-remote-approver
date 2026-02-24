@@ -150,6 +150,31 @@ describe("buildActions", () => {
     const actions = buildActions("https://ntfy.sh", "my-topic", "req-aa5");
     assert.equal(actions.length, 2);
   });
+
+  it("should include Authorization header in action definitions when authToken is provided", () => {
+    const actions = buildActions("https://ntfy.example.com", "my-topic", "req-auth", { authToken: "tk_test123" });
+    for (const action of actions) {
+      assert.deepEqual(action.headers, { Authorization: "Bearer tk_test123" });
+    }
+  });
+
+  it("should not include headers in action definitions when authToken is absent", () => {
+    const actions = buildActions("https://ntfy.sh", "my-topic", "req-noauth");
+    for (const action of actions) {
+      assert.equal(action.headers, undefined);
+    }
+  });
+
+  it("should include Authorization header in Always Approve action when authToken is provided", () => {
+    const actions = buildActions("https://ntfy.example.com", "my-topic", "req-aa-auth", {
+      permissionSuggestions: ["Bash(*)"],
+      authToken: "tk_test123",
+    });
+    assert.equal(actions.length, 3);
+    for (const action of actions) {
+      assert.deepEqual(action.headers, { Authorization: "Bearer tk_test123" });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -768,6 +793,36 @@ describe("processHook", () => {
       },
     });
   });
+
+  it("should pass authToken to sendNotification, waitForResponse, and buildActions", async () => {
+    const sendCalls = [];
+    const waitCalls = [];
+    await processHook(
+      { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" } },
+      {
+        loadConfig: () => ({
+          topic: "my-topic",
+          ntfyServer: "https://ntfy.example.com",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "tk_test123",
+        }),
+        sendNotification: async (params) => { sendCalls.push(params); return { ok: true }; },
+        waitForResponse: async (params) => { waitCalls.push(params); return { approved: true }; },
+        formatToolInfo: () => ({ title: "Test", message: "test" }),
+      },
+    );
+
+    assert.equal(sendCalls.length, 1);
+    assert.equal(sendCalls[0].authToken, "tk_test123");
+    assert.equal(waitCalls.length, 1);
+    assert.equal(waitCalls[0].authToken, "tk_test123");
+    // Verify actions include auth
+    const actions = sendCalls[0].actions;
+    for (const action of actions) {
+      assert.deepEqual(action.headers, { Authorization: "Bearer tk_test123" });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -917,6 +972,22 @@ describe("buildQuestionActions", () => {
     const actions = buildQuestionActions("https://ntfy.sh", "my-topic", "req-1", options);
 
     assert.equal(actions[0].url, "https://ntfy.sh/my-topic-response");
+  });
+
+  it("should include Authorization header in question actions when authToken is provided", () => {
+    const options = [{ label: "Option A", description: "First" }];
+    const actions = buildQuestionActions("https://ntfy.example.com", "my-topic", "req-q-auth", options, { authToken: "tk_test123" });
+    for (const action of actions) {
+      assert.deepEqual(action.headers, { Authorization: "Bearer tk_test123" });
+    }
+  });
+
+  it("should not include headers in question actions when authToken is absent", () => {
+    const options = [{ label: "Option A", description: "First" }];
+    const actions = buildQuestionActions("https://ntfy.sh", "my-topic", "req-q-noauth", options);
+    for (const action of actions) {
+      assert.equal(action.headers, undefined);
+    }
   });
 });
 
@@ -1270,6 +1341,39 @@ describe("processAskUserQuestion", () => {
     } finally {
       errorSpy.mock.restore();
       _internal.delay = originalDelay;
+    }
+  });
+
+  it("should pass authToken through AskUserQuestion flow", async () => {
+    const sendCalls = [];
+    const waitCalls = [];
+    const input = {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [{
+          question: "Which option?",
+          header: "Choice",
+          options: [{ label: "A", description: "First" }],
+          multiSelect: false,
+        }],
+      },
+    };
+
+    await processAskUserQuestion(input, {
+      loadConfig: () => ({
+        topic: "my-topic",
+        ntfyServer: "https://ntfy.example.com",
+        timeout: 120,
+        authToken: "tk_test123",
+      }),
+      sendNotification: async (params) => { sendCalls.push(params); return { ok: true }; },
+      waitForResponse: async (params) => { waitCalls.push(params); return { answer: "A" }; },
+    });
+
+    assert.equal(sendCalls[0].authToken, "tk_test123");
+    assert.equal(waitCalls[0].authToken, "tk_test123");
+    for (const action of sendCalls[0].actions) {
+      assert.deepEqual(action.headers, { Authorization: "Bearer tk_test123" });
     }
   });
 });
