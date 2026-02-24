@@ -20,7 +20,7 @@ import { ASK } from "../src/hook.mjs";
 
 export async function main(args, deps) {
   if (args.includes("--help") || args.includes("-h")) {
-    deps.stdout.write("Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  stop        Stop the background SSE listener\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n");
+    deps.stdout.write("Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  stop        Process a Stop hook with Continue button (internal)\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n");
     return;
   }
   if (args.includes("--version") || args.includes("-v")) {
@@ -238,7 +238,7 @@ export async function main(args, deps) {
 
     default: {
       deps.stderr.write(
-        "Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  stop        Stop the background SSE listener\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n",
+        "Usage: claude-remote-approver <command>\n\nCommands:\n  setup       Set up remote approval\n  test        Send a test notification\n  status      Show current configuration\n  enable      Re-enable the hook\n  disable     Temporarily disable the hook\n  uninstall   Remove hook and delete configuration\n  stop        Process a Stop hook with Continue button (internal)\n  hook        Process a Claude Code hook (internal)\n  notify      Send a fire-and-forget notification (internal)\n  context     Output SessionStart context JSON (internal)\n  prompt      Display the system prompt text\n",
       );
       deps.exit(1);
       break;

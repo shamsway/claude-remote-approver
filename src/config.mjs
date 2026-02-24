@@ -79,7 +79,7 @@ export function isInsecureServer(server) {
     const url = new URL(server);
     if (url.protocol !== "http:") return false;
     const hostname = url.hostname;
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") {
       return false;
     }
     return true;
