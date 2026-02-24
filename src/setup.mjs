@@ -11,6 +11,15 @@ function isCraEntry(entry) {
   return false;
 }
 
+const NOTIFICATION_HOOK_EVENTS = {
+  idle: "Notification",
+  stop: "Stop",
+  sessionStart: "SessionStart",
+  sessionEnd: "SessionEnd",
+  toolFailure: "PostToolUseFailure",
+  subagentStop: "SubagentStop",
+};
+
 /**
  * Returns the hook command string: `node <absolute_path_to_bin/cli.mjs> hook`
  */
@@ -20,6 +29,76 @@ export function getHookCommand() {
     throw new Error(`CLI entry point not found: ${cliPath}`);
   }
   return `node "${cliPath}" hook`;
+}
+
+/**
+ * Returns the notify command string: `node <absolute_path_to_bin/cli.mjs> notify`
+ */
+export function getNotifyCommand() {
+  const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "cli.mjs");
+  if (!fs.existsSync(cliPath)) {
+    throw new Error(`CLI entry point not found: ${cliPath}`);
+  }
+  return `node "${cliPath}" notify`;
+}
+
+/**
+ * Returns the context command string: `node <absolute_path_to_bin/cli.mjs> context`
+ */
+export function getContextCommand() {
+  const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "cli.mjs");
+  if (!fs.existsSync(cliPath)) {
+    throw new Error(`CLI entry point not found: ${cliPath}`);
+  }
+  return `node "${cliPath}" context`;
+}
+
+/**
+ * Registers notification hooks and a context hook in Claude's settings.json.
+ * Only registers hooks for enabled notification types.
+ * Always registers the SessionStart context hook when contextCommand is provided.
+ */
+export function registerNotificationHooks(settingsPath, notifyCommand, notifications, contextCommand) {
+  let settings = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+
+  // Register context hook for SessionStart
+  if (contextCommand) {
+    if (!Array.isArray(settings.hooks.SessionStart)) {
+      settings.hooks.SessionStart = [];
+    }
+    const existingIdx = settings.hooks.SessionStart.findIndex(isCraEntry);
+    const entry = { hooks: [{ type: "command", command: contextCommand }] };
+    if (existingIdx >= 0) {
+      settings.hooks.SessionStart[existingIdx] = entry;
+    } else {
+      settings.hooks.SessionStart.push(entry);
+    }
+  }
+
+  // Register notification hooks for enabled types
+  for (const [configKey, hookEvent] of Object.entries(NOTIFICATION_HOOK_EVENTS)) {
+    if (!notifications[configKey]) continue;
+
+    if (!Array.isArray(settings.hooks[hookEvent])) {
+      settings.hooks[hookEvent] = [];
+    }
+    const existingIdx = settings.hooks[hookEvent].findIndex(isCraEntry);
+    const entry = { hooks: [{ type: "command", command: notifyCommand }] };
+    if (existingIdx >= 0) {
+      settings.hooks[hookEvent][existingIdx] = entry;
+    } else {
+      settings.hooks[hookEvent].push(entry);
+    }
+  }
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
 /**
@@ -96,8 +175,9 @@ export function unregisterHook(settingsPath) {
  * Runs the full setup flow:
  * 1. Generate a topic
  * 2. Build and save config
- * 3. Register the hook in settings.json
- * 4. Return { topic, configPath, settingsPath }
+ * 3. Register the PermissionRequest hook in settings.json
+ * 4. Register notification hooks and context hook
+ * 5. Return { topic, ntfyServer, configPath, settingsPath }
  */
 export async function runSetup({
   configPath,
@@ -114,6 +194,11 @@ export async function runSetup({
 
   const hookCommand = getHookCommand();
   registerHook(settingsPath, hookCommand);
+
+  // Register notification hooks and context hook
+  const notifyCommand = getNotifyCommand();
+  const contextCommand = getContextCommand();
+  registerNotificationHooks(settingsPath, notifyCommand, config.notifications || {}, contextCommand);
 
   return { topic, ntfyServer: config.ntfyServer, configPath, settingsPath };
 }

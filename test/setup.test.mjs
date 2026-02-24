@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runSetup, registerHook, getHookCommand, unregisterHook } from "../src/setup.mjs";
+import { runSetup, registerHook, getHookCommand, unregisterHook, registerNotificationHooks, getNotifyCommand, getContextCommand } from "../src/setup.mjs";
 
 // ===========================================================================
 // runSetup
@@ -610,5 +610,154 @@ describe("unregisterHook", () => {
 
     const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
     assert.equal(settings.hooks, undefined, "hooks key should be removed after clearing legacy flat entry");
+  });
+});
+
+// ===========================================================================
+// registerNotificationHooks
+// ===========================================================================
+
+describe("registerNotificationHooks", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-notify-hook-test-"));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should register Notification hook when idle is enabled", () => {
+    const settingsPath = path.join(tmpDir, "notify-idle.json");
+    const hookCommand = 'node "/path/to/cli.mjs" notify';
+    registerNotificationHooks(settingsPath, hookCommand, { idle: true, stop: false });
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(Array.isArray(settings.hooks.Notification));
+    assert.equal(settings.hooks.Notification.length, 1);
+    assert.ok(settings.hooks.Notification[0].hooks[0].command.includes("notify"));
+  });
+
+  it("should register Stop hook when stop is enabled", () => {
+    const settingsPath = path.join(tmpDir, "notify-stop.json");
+    const hookCommand = 'node "/path/to/cli.mjs" notify';
+    registerNotificationHooks(settingsPath, hookCommand, { idle: false, stop: true });
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(Array.isArray(settings.hooks.Stop));
+  });
+
+  it("should register SessionStart context hook when contextCommand is provided", () => {
+    const settingsPath = path.join(tmpDir, "notify-context.json");
+    registerNotificationHooks(settingsPath, 'node "/path/cli.mjs" notify', {}, 'node "/path/cli.mjs" context');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.ok(Array.isArray(settings.hooks.SessionStart));
+    assert.ok(settings.hooks.SessionStart[0].hooks[0].command.includes("context"));
+  });
+
+  it("should not register hooks for disabled notification types", () => {
+    const settingsPath = path.join(tmpDir, "notify-disabled.json");
+    registerNotificationHooks(settingsPath, 'node "/path/cli.mjs" notify', { idle: false, stop: false, sessionStart: false, sessionEnd: false, toolFailure: false, subagentStop: false });
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(settings.hooks?.Notification, undefined);
+    assert.equal(settings.hooks?.Stop, undefined);
+  });
+
+  it("should preserve existing non-CRA hooks", () => {
+    const settingsPath = path.join(tmpDir, "notify-preserve.json");
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: "command", command: "echo other" }] }] },
+    }, null, 2));
+    registerNotificationHooks(settingsPath, 'node "/path/cli.mjs" notify', { stop: true });
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(settings.hooks.Stop.length, 2);
+    assert.equal(settings.hooks.Stop[0].hooks[0].command, "echo other");
+  });
+
+  it("should update existing CRA hook entry in place", () => {
+    const settingsPath = path.join(tmpDir, "notify-update.json");
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      hooks: { Notification: [{ hooks: [{ type: "command", command: "node /old/claude-remote-approver/bin/cli.mjs notify" }] }] },
+    }, null, 2));
+    registerNotificationHooks(settingsPath, 'node "/new/cli.mjs" notify', { idle: true });
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(settings.hooks.Notification.length, 1);
+    assert.ok(settings.hooks.Notification[0].hooks[0].command.includes("/new/cli.mjs"));
+  });
+});
+
+// ===========================================================================
+// getNotifyCommand
+// ===========================================================================
+
+describe("getNotifyCommand", () => {
+  it("should return a string ending with 'notify'", () => {
+    const cmd = getNotifyCommand();
+    assert.ok(cmd.endsWith(" notify"));
+  });
+
+  it("should contain cli.mjs in the path", () => {
+    const cmd = getNotifyCommand();
+    assert.ok(cmd.includes("cli.mjs"));
+  });
+});
+
+// ===========================================================================
+// getContextCommand
+// ===========================================================================
+
+describe("getContextCommand", () => {
+  it("should return a string ending with 'context'", () => {
+    const cmd = getContextCommand();
+    assert.ok(cmd.endsWith(" context"));
+  });
+
+  it("should contain cli.mjs in the path", () => {
+    const cmd = getContextCommand();
+    assert.ok(cmd.includes("cli.mjs"));
+  });
+});
+
+// ===========================================================================
+// runSetup - notification hooks
+// ===========================================================================
+
+describe("runSetup notification hooks", () => {
+  let tmpDir;
+  let tmpConfigPath;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-setup-notify-test-"));
+    tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should register notification hooks during setup when config has notifications", async () => {
+    const tmpSettingsPath2 = path.join(tmpDir, "settings-notify-setup.json");
+    if (fs.existsSync(tmpSettingsPath2)) fs.unlinkSync(tmpSettingsPath2);
+
+    await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath2,
+      generateTopic: () => "cra-notifysetup1",
+      saveConfig: () => {},
+      loadConfig: () => ({
+        topic: "",
+        ntfyServer: "https://ntfy.sh",
+        timeout: 120,
+        authToken: "",
+        notifications: { idle: true, stop: true, toolFailure: true, sessionStart: false, sessionEnd: false, subagentStop: false },
+      }),
+    });
+
+    const settings = JSON.parse(fs.readFileSync(tmpSettingsPath2, "utf-8"));
+    assert.ok(settings.hooks.PermissionRequest, "should have PermissionRequest hook");
+    assert.ok(settings.hooks.Notification, "should have Notification hook for idle");
+    assert.ok(settings.hooks.Stop, "should have Stop hook");
+    assert.ok(settings.hooks.PostToolUseFailure, "should have PostToolUseFailure hook");
+    assert.ok(settings.hooks.SessionStart, "should have SessionStart hook for context");
+    assert.equal(settings.hooks.SessionEnd, undefined, "should not have SessionEnd hook");
   });
 });
