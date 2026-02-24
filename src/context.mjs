@@ -1,7 +1,7 @@
 // src/context.mjs
 
 export function generateContext(config) {
-  const ctx = `## Remote Approval Context
+  let ctx = `## Remote Approval Context
 
 Permission requests and questions in this session are delivered to the user's phone via push notifications (ntfy). Keep these constraints in mind:
 
@@ -23,6 +23,12 @@ Permission requests and questions in this session are delivered to the user's ph
 - Responses may have higher latency than a local terminal
 - Minimize the total number of permission prompts and questions per task
 - When a task can proceed with reasonable defaults, prefer that over asking`;
+
+  if (config.notifications?.stopWithContinue) {
+    ctx += `
+- When you finish a task, the user receives a notification with a Continue button
+  They can tap it to request you keep working — wait for this before considering the task complete`;
+  }
 
   return {
     hookSpecificOutput: {

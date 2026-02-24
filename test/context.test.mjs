@@ -33,3 +33,25 @@ describe("generateContext", () => {
               result.hookSpecificOutput.additionalContext.toLowerCase().includes("cannot type"));
   });
 });
+
+describe("generateContext with stopWithContinue", () => {
+  it("should mention Continue button when stopWithContinue is enabled", () => {
+    const config = { timeout: 120, planTimeout: 300, notifications: { stopWithContinue: true } };
+    const result = generateContext(config);
+    const ctx = result.hookSpecificOutput.additionalContext;
+    assert.ok(ctx.toLowerCase().includes("continue"));
+  });
+
+  it("should not mention Continue button when stopWithContinue is disabled", () => {
+    const config = { timeout: 120, planTimeout: 300, notifications: { stopWithContinue: false } };
+    const result = generateContext(config);
+    const ctx = result.hookSpecificOutput.additionalContext;
+    assert.ok(!ctx.toLowerCase().includes("continue button"));
+  });
+
+  it("should work when notifications is undefined", () => {
+    const config = { timeout: 120, planTimeout: 300 };
+    const result = generateContext(config);
+    assert.ok(result.hookSpecificOutput.additionalContext.length > 0);
+  });
+});
