@@ -94,12 +94,16 @@ export async function main(args, deps) {
       deps.stdout.write(`Topic:   ${config.topic}\n`);
       deps.stdout.write(`Server:  ${config.ntfyServer}\n`);
       deps.stdout.write(`Auth:    ${config.authToken ? `${config.authToken.slice(0, 7)}... (configured)` : "none"}\n`);
-      deps.stdout.write(`Timeout: ${config.timeout}s / ${config.planTimeout ?? 300}s (plan)\n`);
+      deps.stdout.write(`Timeout: ${config.timeout}s / ${config.planTimeout ?? 300}s (plan)`);
+      if (config.continueTimeout && config.continueTimeout !== config.timeout) {
+        deps.stdout.write(` / ${config.continueTimeout}s (continue)`);
+      }
+      deps.stdout.write("\n");
       if (config.notifications) {
         deps.stdout.write("Notifications:\n");
         const labels = {
           idle: "Idle prompt",
-          stop: "Stop (finished)",
+          stop: config.notifications.stopWithContinue ? "Stop + Continue" : "Stop (finished)",
           sessionStart: "Session start",
           sessionEnd: "Session end",
           toolFailure: "Tool failure",

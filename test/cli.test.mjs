@@ -445,6 +445,110 @@ describe("main", () => {
       const output = stdout.output();
       assert.ok(output.includes("300s"), `should show plan timeout, got: ${output}`);
     });
+
+    it("should show 'Stop + Continue' when stopWithContinue is true", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "",
+          notifications: { idle: true, stop: true, sessionStart: false, sessionEnd: false, toolFailure: true, subagentStop: false, stopWithContinue: true },
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("Stop + Continue"), `should show 'Stop + Continue', got: ${output}`);
+      assert.ok(!output.includes("Stop (finished)"), `should NOT show 'Stop (finished)' when stopWithContinue is true, got: ${output}`);
+    });
+
+    it("should show 'Stop (finished)' when stopWithContinue is false", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "",
+          notifications: { idle: true, stop: true, sessionStart: false, sessionEnd: false, toolFailure: true, subagentStop: false, stopWithContinue: false },
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("Stop (finished)"), `should show 'Stop (finished)' when stopWithContinue is false, got: ${output}`);
+      assert.ok(!output.includes("Stop + Continue"), `should NOT show 'Stop + Continue' when stopWithContinue is false, got: ${output}`);
+    });
+
+    it("should show continueTimeout when it differs from timeout", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          continueTimeout: 45,
+          authToken: "",
+          notifications: {},
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("45s (continue)"), `should show continueTimeout, got: ${output}`);
+    });
+
+    it("should NOT show continueTimeout when it equals timeout", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          continueTimeout: 120,
+          authToken: "",
+          notifications: {},
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(!output.includes("(continue)"), `should NOT show continueTimeout when it equals timeout, got: ${output}`);
+    });
+
+    it("should NOT show continueTimeout when it is not set", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "",
+          notifications: {},
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(!output.includes("(continue)"), `should NOT show continueTimeout when not set, got: ${output}`);
+    });
   });
 
   // =========================================================================
