@@ -360,6 +360,89 @@ describe("main", () => {
         `stdout should contain the server URL, got: ${output}`,
       );
     });
+
+    it("should show auth status when authToken is configured", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.example.com",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "tk_AgQdq7mVBoFD37zQVN29RhuMzNIz2",
+          notifications: { idle: true, stop: true, sessionStart: false, sessionEnd: false, toolFailure: true, subagentStop: false, stopWithContinue: false },
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("Auth:"), `should show Auth line, got: ${output}`);
+      assert.ok(output.includes("configured"), `should show auth configured, got: ${output}`);
+    });
+
+    it("should show 'none' for auth when no authToken is configured", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "",
+          notifications: { idle: true, stop: true, sessionStart: false, sessionEnd: false, toolFailure: true, subagentStop: false, stopWithContinue: false },
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("none"), `should show auth none, got: ${output}`);
+    });
+
+    it("should show notification status", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "",
+          notifications: { idle: true, stop: true, sessionStart: false, sessionEnd: false, toolFailure: true, subagentStop: false, stopWithContinue: false },
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("Notifications:"), `should show Notifications section, got: ${output}`);
+      assert.ok(output.includes("Idle prompt"), `should list idle notification, got: ${output}`);
+      assert.ok(output.includes("Tool failure"), `should list tool failure notification, got: ${output}`);
+    });
+
+    it("should show plan timeout in status", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdout,
+        config: {
+          topic: "cra-abc",
+          ntfyServer: "https://ntfy.sh",
+          timeout: 120,
+          planTimeout: 300,
+          authToken: "",
+          notifications: {},
+        },
+      });
+
+      await main(["status"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.includes("300s"), `should show plan timeout, got: ${output}`);
+    });
   });
 
   // =========================================================================

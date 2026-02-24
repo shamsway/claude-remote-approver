@@ -82,7 +82,23 @@ export async function main(args, deps) {
       const config = deps.loadConfig();
       deps.stdout.write(`Topic:   ${config.topic}\n`);
       deps.stdout.write(`Server:  ${config.ntfyServer}\n`);
-      deps.stdout.write(`Timeout: ${config.timeout}s\n`);
+      deps.stdout.write(`Auth:    ${config.authToken ? `${config.authToken.slice(0, 7)}... (configured)` : "none"}\n`);
+      deps.stdout.write(`Timeout: ${config.timeout}s / ${config.planTimeout ?? 300}s (plan)\n`);
+      if (config.notifications) {
+        deps.stdout.write("Notifications:\n");
+        const labels = {
+          idle: "Idle prompt",
+          stop: "Stop (finished)",
+          sessionStart: "Session start",
+          sessionEnd: "Session end",
+          toolFailure: "Tool failure",
+          subagentStop: "Subagent stop",
+        };
+        for (const [key, label] of Object.entries(labels)) {
+          const enabled = config.notifications[key];
+          deps.stdout.write(`  ${enabled ? "\u2713" : "\u2717"} ${label}\n`);
+        }
+      }
       break;
     }
 
