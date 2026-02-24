@@ -80,6 +80,21 @@ describe("DEFAULT_CONFIG", () => {
   it("should have planTimeout as 300", () => {
     assert.equal(DEFAULT_CONFIG.planTimeout, 300);
   });
+
+  it("should have authToken as empty string", () => {
+    assert.equal(DEFAULT_CONFIG.authToken, "");
+  });
+
+  it("should have notifications as an object with correct defaults", () => {
+    assert.equal(typeof DEFAULT_CONFIG.notifications, "object");
+    assert.equal(DEFAULT_CONFIG.notifications.idle, true);
+    assert.equal(DEFAULT_CONFIG.notifications.stop, true);
+    assert.equal(DEFAULT_CONFIG.notifications.sessionStart, false);
+    assert.equal(DEFAULT_CONFIG.notifications.sessionEnd, false);
+    assert.equal(DEFAULT_CONFIG.notifications.toolFailure, true);
+    assert.equal(DEFAULT_CONFIG.notifications.subagentStop, false);
+    assert.equal(DEFAULT_CONFIG.notifications.stopWithContinue, false);
+  });
 });
 
 // ==================== loadConfig ====================
@@ -110,10 +125,20 @@ describe("loadConfig", () => {
     assert.deepEqual(config, {
       topic: "",
       ntfyServer: "https://ntfy.sh",
+      authToken: "",
       timeout: 120,
       planTimeout: 300,
       autoApprove: [],
       autoDeny: [],
+      notifications: {
+        idle: true,
+        stop: true,
+        sessionStart: false,
+        sessionEnd: false,
+        toolFailure: true,
+        subagentStop: false,
+        stopWithContinue: false,
+      },
     });
   });
 
@@ -137,10 +162,20 @@ describe("loadConfig", () => {
     const fullConfig = {
       topic: "full-topic",
       ntfyServer: "https://custom.ntfy.example.com",
+      authToken: "tk_test123",
       timeout: 300,
       planTimeout: 600,
       autoApprove: ["Bash(*)"],
       autoDeny: ["mcp__*"],
+      notifications: {
+        idle: true,
+        stop: true,
+        sessionStart: false,
+        sessionEnd: false,
+        toolFailure: true,
+        subagentStop: false,
+        stopWithContinue: false,
+      },
     };
     fs.writeFileSync(tmpConfigPath, JSON.stringify(fullConfig, null, 2));
 
@@ -209,6 +244,32 @@ describe("loadConfig", () => {
     const config = loadConfig(tmpConfigPath);
     assert.equal(config.planTimeout, 600);
   });
+
+  it("should fall back to default authToken when authToken is not a string", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ authToken: 123 }));
+    const config = loadConfig(tmpConfigPath);
+    assert.equal(config.authToken, DEFAULT_CONFIG.authToken);
+  });
+
+  it("should accept valid authToken from config file", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ authToken: "tk_AgQdq7mVBoFD37zQVN29RhuMzNIz2" }));
+    const config = loadConfig(tmpConfigPath);
+    assert.equal(config.authToken, "tk_AgQdq7mVBoFD37zQVN29RhuMzNIz2");
+  });
+
+  it("should fall back to default notifications when notifications is not an object", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ notifications: "all" }));
+    const config = loadConfig(tmpConfigPath);
+    assert.deepEqual(config.notifications, DEFAULT_CONFIG.notifications);
+  });
+
+  it("should merge partial notifications with defaults", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ notifications: { idle: false, sessionStart: true } }));
+    const config = loadConfig(tmpConfigPath);
+    assert.equal(config.notifications.idle, false);
+    assert.equal(config.notifications.sessionStart, true);
+    assert.equal(config.notifications.stop, true); // default preserved
+  });
 });
 
 // ==================== saveConfig ====================
@@ -260,10 +321,20 @@ describe("saveConfig", () => {
     const original = {
       topic: "roundtrip",
       ntfyServer: "https://custom.example.com",
+      authToken: "",
       timeout: 90,
       planTimeout: 180,
       autoApprove: ["Read"],
       autoDeny: ["Bash(rm*)"],
+      notifications: {
+        idle: true,
+        stop: true,
+        sessionStart: false,
+        sessionEnd: false,
+        toolFailure: true,
+        subagentStop: false,
+        stopWithContinue: false,
+      },
     };
 
     saveConfig(original, tmpConfigPath);
