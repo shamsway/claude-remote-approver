@@ -11,6 +11,8 @@ export const DEFAULT_CONFIG = {
   authToken: "",
   timeout: 120,
   planTimeout: 300,
+  continueTimeout: 120,
+  allowInsecure: false,
   // autoApprove/autoDeny are reserved for future use and not yet implemented
   autoApprove: [],
   autoDeny: [],
@@ -29,6 +31,10 @@ function applyEnvOverrides(config) {
   if (process.env.CCR_NTFY_TOPIC) config.topic = process.env.CCR_NTFY_TOPIC;
   if (process.env.CCR_NTFY_SERVER) config.ntfyServer = process.env.CCR_NTFY_SERVER;
   if (process.env.CCR_NTFY_TOKEN) config.authToken = process.env.CCR_NTFY_TOKEN;
+  if (process.env.CCR_CONTINUE_TIMEOUT) {
+    const val = Number(process.env.CCR_CONTINUE_TIMEOUT);
+    if (Number.isFinite(val) && val > 0) config.continueTimeout = val;
+  }
   return config;
 }
 
@@ -41,6 +47,8 @@ export function loadConfig(configPath = CONFIG_PATH) {
     if (typeof config.ntfyServer !== "string") config.ntfyServer = DEFAULT_CONFIG.ntfyServer;
     if (!Number.isFinite(config.timeout) || config.timeout <= 0) config.timeout = DEFAULT_CONFIG.timeout;
     if (!Number.isFinite(config.planTimeout) || config.planTimeout <= 0) config.planTimeout = DEFAULT_CONFIG.planTimeout;
+    if (!Number.isFinite(config.continueTimeout) || config.continueTimeout <= 0) config.continueTimeout = DEFAULT_CONFIG.continueTimeout;
+    if (typeof config.allowInsecure !== "boolean") config.allowInsecure = DEFAULT_CONFIG.allowInsecure;
     if (!Array.isArray(config.autoApprove)) config.autoApprove = DEFAULT_CONFIG.autoApprove;
     if (!Array.isArray(config.autoDeny)) config.autoDeny = DEFAULT_CONFIG.autoDeny;
     if (typeof config.authToken !== "string") config.authToken = DEFAULT_CONFIG.authToken;

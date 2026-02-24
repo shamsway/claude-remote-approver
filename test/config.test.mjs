@@ -110,7 +110,7 @@ describe("loadConfig", () => {
     tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
     // Save and clear CCR_ env vars so they don't interfere with tests
     savedEnv = {};
-    for (const key of ["CCR_NTFY_TOPIC", "CCR_NTFY_SERVER", "CCR_NTFY_TOKEN"]) {
+    for (const key of ["CCR_NTFY_TOPIC", "CCR_NTFY_SERVER", "CCR_NTFY_TOKEN", "CCR_CONTINUE_TIMEOUT"]) {
       savedEnv[key] = process.env[key];
       delete process.env[key];
     }
@@ -140,6 +140,8 @@ describe("loadConfig", () => {
       authToken: "",
       timeout: 120,
       planTimeout: 300,
+      continueTimeout: 120,
+      allowInsecure: false,
       autoApprove: [],
       autoDeny: [],
       notifications: {
@@ -177,6 +179,8 @@ describe("loadConfig", () => {
       authToken: "tk_test123",
       timeout: 300,
       planTimeout: 600,
+      continueTimeout: 60,
+      allowInsecure: true,
       autoApprove: ["Bash(*)"],
       autoDeny: ["mcp__*"],
       notifications: {
@@ -284,6 +288,107 @@ describe("loadConfig", () => {
   });
 });
 
+// ==================== continueTimeout config ====================
+
+describe("continueTimeout config", () => {
+  let tmpDir;
+  let tmpConfigPath;
+  let savedEnv;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-test-"));
+    tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+    savedEnv = {};
+    for (const key of ["CCR_NTFY_TOPIC", "CCR_NTFY_SERVER", "CCR_NTFY_TOKEN", "CCR_CONTINUE_TIMEOUT"]) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  after(() => {
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val !== undefined) process.env[key] = val;
+      else delete process.env[key];
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should default continueTimeout to 120", () => {
+    const nonExistentPath = path.join(tmpDir, "no-such-file.json");
+    const config = loadConfig(nonExistentPath);
+    assert.equal(config.continueTimeout, 120);
+  });
+
+  it("should respect continueTimeout from file", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ continueTimeout: 60 }));
+    const config = loadConfig(tmpConfigPath);
+    assert.equal(config.continueTimeout, 60);
+  });
+
+  it("should validate continueTimeout is a positive finite number", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ continueTimeout: "fast" }));
+    let config = loadConfig(tmpConfigPath);
+    assert.equal(config.continueTimeout, DEFAULT_CONFIG.continueTimeout);
+
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ continueTimeout: 0 }));
+    config = loadConfig(tmpConfigPath);
+    assert.equal(config.continueTimeout, DEFAULT_CONFIG.continueTimeout);
+
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ continueTimeout: -10 }));
+    config = loadConfig(tmpConfigPath);
+    assert.equal(config.continueTimeout, DEFAULT_CONFIG.continueTimeout);
+  });
+
+  it("should apply CCR_CONTINUE_TIMEOUT env var override", () => {
+    const nonExistentPath = path.join(tmpDir, "no-such-file.json");
+    process.env.CCR_CONTINUE_TIMEOUT = "240";
+    try {
+      const config = loadConfig(nonExistentPath);
+      assert.equal(config.continueTimeout, 240);
+    } finally {
+      delete process.env.CCR_CONTINUE_TIMEOUT;
+    }
+  });
+});
+
+// ==================== allowInsecure config ====================
+
+describe("allowInsecure config", () => {
+  let tmpDir;
+  let tmpConfigPath;
+  let savedEnv;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-test-"));
+    tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+    savedEnv = {};
+    for (const key of ["CCR_NTFY_TOPIC", "CCR_NTFY_SERVER", "CCR_NTFY_TOKEN", "CCR_CONTINUE_TIMEOUT"]) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  after(() => {
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val !== undefined) process.env[key] = val;
+      else delete process.env[key];
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should default allowInsecure to false", () => {
+    const nonExistentPath = path.join(tmpDir, "no-such-file.json");
+    const config = loadConfig(nonExistentPath);
+    assert.equal(config.allowInsecure, false);
+  });
+
+  it("should respect allowInsecure from file", () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ allowInsecure: true }));
+    const config = loadConfig(tmpConfigPath);
+    assert.equal(config.allowInsecure, true);
+  });
+});
+
 // ==================== saveConfig ====================
 
 describe("saveConfig", () => {
@@ -346,6 +451,8 @@ describe("saveConfig", () => {
       authToken: "",
       timeout: 90,
       planTimeout: 180,
+      continueTimeout: 90,
+      allowInsecure: false,
       autoApprove: ["Read"],
       autoDeny: ["Bash(rm*)"],
       notifications: {
