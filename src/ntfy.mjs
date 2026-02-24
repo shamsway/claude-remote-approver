@@ -111,6 +111,34 @@ export async function waitForResponse({ server, topic, requestId, timeout, authT
 }
 
 /**
+ * Validate an ntfy auth token by attempting a minimal POST to the server.
+ *
+ * @param {string} server - The ntfy server base URL
+ * @param {string} topic  - The topic to post to
+ * @param {string} authToken - The bearer token to validate
+ * @returns {Promise<{ valid: true } | { valid: false, status?: number, message?: string }>}
+ */
+export async function validateToken(server, topic, authToken) {
+  const baseUrl = server.replace(/\/+$/, '');
+  try {
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ topic, message: "Token validation", priority: 1 }),
+    });
+    if (response.ok) {
+      return { valid: true };
+    }
+    return { valid: false, status: response.status, message: `HTTP ${response.status}` };
+  } catch (err) {
+    return { valid: false, message: err.message };
+  }
+}
+
+/**
  * Strip markdown formatting from text, returning plain text.
  *
  * @param {string} text - Markdown text to strip

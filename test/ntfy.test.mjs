@@ -11,7 +11,7 @@
 
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { sendNotification, waitForResponse, formatToolInfo, stripMarkdown } from "../src/ntfy.mjs";
+import { sendNotification, waitForResponse, formatToolInfo, stripMarkdown, validateToken } from "../src/ntfy.mjs";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1356,5 +1356,86 @@ describe("stripMarkdown", () => {
     it("should handle multiple brackets with code spans in between", () => {
       assert.equal(stripMarkdown("[a `]` b](url)"), "a ] b");
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateToken
+// ---------------------------------------------------------------------------
+
+describe("validateToken", () => {
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns { valid: true } on 200 response", async () => {
+    globalThis.fetch = createMockFetch({}, 200);
+
+    const result = await validateToken("https://ntfy.sh", "my-topic", "tk_secret");
+
+    assert.deepEqual(result, { valid: true });
+  });
+
+  it("sends POST with Authorization header", async () => {
+    const mockFetch = createMockFetch({}, 200);
+    globalThis.fetch = mockFetch;
+
+    await validateToken("https://ntfy.sh", "my-topic", "tk_secret");
+
+    assert.equal(mockFetch.calls.length, 1);
+    const { options } = mockFetch.calls[0];
+    assert.equal(options.method, "POST");
+    const authHeader =
+      options.headers instanceof Headers
+        ? options.headers.get("Authorization")
+        : options.headers["Authorization"];
+    assert.equal(authHeader, "Bearer tk_secret");
+  });
+
+  it("sends minimal body with topic and priority 1", async () => {
+    const mockFetch = createMockFetch({}, 200);
+    globalThis.fetch = mockFetch;
+
+    await validateToken("https://ntfy.sh", "my-topic", "tk_secret");
+
+    const body = JSON.parse(mockFetch.calls[0].options.body);
+    assert.equal(body.topic, "my-topic");
+    assert.equal(body.priority, 1);
+    assert.equal(typeof body.message, "string");
+  });
+
+  it("returns { valid: false, status: 401 } on 401 response", async () => {
+    globalThis.fetch = createMockFetch({}, 401);
+
+    const result = await validateToken("https://ntfy.sh", "my-topic", "bad_token");
+
+    assert.equal(result.valid, false);
+    assert.equal(result.status, 401);
+  });
+
+  it("returns { valid: false, status: 403 } on 403 response", async () => {
+    globalThis.fetch = createMockFetch({}, 403);
+
+    const result = await validateToken("https://ntfy.sh", "my-topic", "bad_token");
+
+    assert.equal(result.valid, false);
+    assert.equal(result.status, 403);
+  });
+
+  it("returns { valid: false, message } on network error", async () => {
+    globalThis.fetch = mock.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+
+    const result = await validateToken("https://ntfy.sh", "my-topic", "tk_secret");
+
+    assert.equal(result.valid, false);
+    assert.ok(result.message.includes("ECONNREFUSED"), `Expected ECONNREFUSED in message, got: ${result.message}`);
   });
 });
