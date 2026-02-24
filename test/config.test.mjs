@@ -23,6 +23,7 @@ import {
   loadConfig,
   saveConfig,
   generateTopic,
+  isInsecureServer,
 } from "../src/config.mjs";
 
 // ==================== CONFIG_PATH ====================
@@ -515,5 +516,49 @@ describe("generateTopic", () => {
       topics.add(generateTopic());
     }
     assert.equal(topics.size, 20, "All 20 generated topics should be unique");
+  });
+});
+
+// ==================== isInsecureServer ====================
+
+describe("isInsecureServer", () => {
+  it("should be a function", () => {
+    assert.equal(typeof isInsecureServer, "function");
+  });
+
+  it("should return true for http:// with a non-localhost hostname", () => {
+    assert.equal(isInsecureServer("http://ntfy.example.com"), true);
+  });
+
+  it("should return false for https:// with a non-localhost hostname", () => {
+    assert.equal(isInsecureServer("https://ntfy.example.com"), false);
+  });
+
+  it("should return false for http://localhost", () => {
+    assert.equal(isInsecureServer("http://localhost"), false);
+  });
+
+  it("should return false for http://localhost with a port", () => {
+    assert.equal(isInsecureServer("http://localhost:8080"), false);
+  });
+
+  it("should return false for http://127.0.0.1", () => {
+    assert.equal(isInsecureServer("http://127.0.0.1"), false);
+  });
+
+  it("should return false for http://127.0.0.1 with a port", () => {
+    assert.equal(isInsecureServer("http://127.0.0.1:8080"), false);
+  });
+
+  it("should return false for http://[::1]", () => {
+    assert.equal(isInsecureServer("http://[::1]"), false);
+  });
+
+  it("should return false for http://[::1] with a port", () => {
+    assert.equal(isInsecureServer("http://[::1]:8080"), false);
+  });
+
+  it("should return false for an invalid URL (graceful fallback)", () => {
+    assert.equal(isInsecureServer("not-a-url"), false);
   });
 });
