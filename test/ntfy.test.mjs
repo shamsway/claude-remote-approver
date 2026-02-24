@@ -274,6 +274,135 @@ describe("sendNotification", () => {
     // Should strip trailing slash and POST to base URL only
     assert.equal(mockFetch.calls[0].url, "https://ntfy.sh");
   });
+
+  it("should include Authorization header when authToken is provided", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.example.com",
+      topic: "my-topic",
+      title: "Test",
+      message: "Hello",
+      actions: [],
+      requestId: "req-auth-1",
+      authToken: "tk_testtoken123",
+    });
+
+    const headers = mockFetch.calls[0].options.headers;
+    const auth = headers instanceof Headers ? headers.get("Authorization") : headers["Authorization"];
+    assert.equal(auth, "Bearer tk_testtoken123");
+  });
+
+  it("should not include Authorization header when authToken is absent", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      title: "Test",
+      message: "Hello",
+      actions: [],
+      requestId: "req-auth-2",
+    });
+
+    const headers = mockFetch.calls[0].options.headers;
+    const auth = headers instanceof Headers ? headers.get("Authorization") : headers["Authorization"];
+    assert.equal(auth, undefined);
+  });
+
+  it("should not include Authorization header when authToken is empty string", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      title: "Test",
+      message: "Hello",
+      actions: [],
+      requestId: "req-auth-3",
+      authToken: "",
+    });
+
+    const headers = mockFetch.calls[0].options.headers;
+    const auth = headers instanceof Headers ? headers.get("Authorization") : headers["Authorization"];
+    assert.equal(auth, undefined);
+  });
+
+  it("should include priority in JSON body when provided", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      title: "Test",
+      message: "Hello",
+      actions: [],
+      requestId: "req-pri",
+      priority: 4,
+    });
+
+    const body = JSON.parse(mockFetch.calls[0].options.body);
+    assert.equal(body.priority, 4);
+  });
+
+  it("should include tags in JSON body when provided", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      title: "Test",
+      message: "Hello",
+      actions: [],
+      requestId: "req-tags",
+      tags: ["warning", "computer"],
+    });
+
+    const body = JSON.parse(mockFetch.calls[0].options.body);
+    assert.deepEqual(body.tags, ["warning", "computer"]);
+  });
+
+  it("should include markdown: true in JSON body when provided", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      title: "Test",
+      message: "**bold** message",
+      actions: [],
+      requestId: "req-md",
+      markdown: true,
+    });
+
+    const body = JSON.parse(mockFetch.calls[0].options.body);
+    assert.equal(body.markdown, true);
+  });
+
+  it("should not include priority, tags, or markdown when not provided", async () => {
+    const mockFetch = createMockFetch();
+    globalThis.fetch = mockFetch;
+
+    await sendNotification({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      title: "Test",
+      message: "Hello",
+      actions: [],
+      requestId: "req-plain",
+    });
+
+    const body = JSON.parse(mockFetch.calls[0].options.body);
+    assert.equal(body.priority, undefined);
+    assert.equal(body.tags, undefined);
+    assert.equal(body.markdown, undefined);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -567,6 +696,56 @@ describe("waitForResponse", () => {
     });
 
     assert.deepEqual(result, { approved: true, alwaysAllow: false });
+  });
+
+  it("should include Authorization header when authToken is provided", async () => {
+    let capturedOptions;
+    const mockFetch = mock.fn(async (url, options) => {
+      capturedOptions = options;
+      return {
+        ok: true,
+        status: 200,
+        body: createSSEStream([
+          { event: "message", message: JSON.stringify({ requestId: "req-auth-wr", approved: true }) },
+        ]),
+      };
+    });
+    globalThis.fetch = mockFetch;
+
+    await waitForResponse({
+      server: "https://ntfy.example.com",
+      topic: "my-topic",
+      requestId: "req-auth-wr",
+      timeout: 5000,
+      authToken: "tk_testtoken123",
+    });
+
+    assert.ok(capturedOptions.headers, "fetch should have headers");
+    assert.equal(capturedOptions.headers["Authorization"], "Bearer tk_testtoken123");
+  });
+
+  it("should not include Authorization header when authToken is absent", async () => {
+    let capturedOptions;
+    const mockFetch = mock.fn(async (url, options) => {
+      capturedOptions = options;
+      return {
+        ok: true,
+        status: 200,
+        body: createSSEStream([
+          { event: "message", message: JSON.stringify({ requestId: "req-noauth-wr", approved: true }) },
+        ]),
+      };
+    });
+    globalThis.fetch = mockFetch;
+
+    await waitForResponse({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      requestId: "req-noauth-wr",
+      timeout: 5000,
+    });
+
+    assert.equal(capturedOptions.headers, undefined);
   });
 });
 

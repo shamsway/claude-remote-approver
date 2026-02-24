@@ -3,17 +3,27 @@
 /**
  * Send a push notification via ntfy.
  *
- * @param {{ server: string, topic: string, title: string, message: string, actions: unknown[], requestId: string }} params
+ * @param {{ server: string, topic: string, title: string, message: string, actions: unknown[], requestId: string, authToken?: string, priority?: number, tags?: string[], markdown?: boolean }} params
  * @returns {Promise<Response>}
  */
-export async function sendNotification({ server, topic, title, message, actions, requestId }) {
+export async function sendNotification({ server, topic, title, message, actions, requestId, authToken, priority, tags, markdown }) {
   const baseUrl = server.replace(/\/+$/, '');
   const url = baseUrl;
 
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  const body = { topic, title, message, actions };
+  if (priority) body.priority = priority;
+  if (tags) body.tags = tags;
+  if (markdown) body.markdown = true;
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, title, message, actions }),
+    headers,
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -26,20 +36,24 @@ export async function sendNotification({ server, topic, title, message, actions,
 /**
  * Subscribe to the response topic via SSE and wait for a matching requestId.
  *
- * @param {{ server: string, topic: string, requestId: string, timeout: number }} params
+ * @param {{ server: string, topic: string, requestId: string, timeout: number, authToken?: string }} params
  * @returns {Promise<{ approved: boolean } | { timeout: true } | { error: Error } | { answer: string }>}
  */
-export async function waitForResponse({ server, topic, requestId, timeout }) {
+export async function waitForResponse({ server, topic, requestId, timeout, authToken }) {
   const baseUrl = server.replace(/\/+$/, '');
   const url = `${baseUrl}/${topic}-response/json`;
 
   const controller = new AbortController();
+  const fetchOptions = { signal: controller.signal };
+  if (authToken) {
+    fetchOptions.headers = { 'Authorization': `Bearer ${authToken}` };
+  }
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, fetchOptions);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
