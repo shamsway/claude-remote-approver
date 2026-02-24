@@ -25,6 +25,13 @@ export const DEFAULT_CONFIG = {
   },
 };
 
+function applyEnvOverrides(config) {
+  if (process.env.CCR_NTFY_TOPIC) config.topic = process.env.CCR_NTFY_TOPIC;
+  if (process.env.CCR_NTFY_SERVER) config.ntfyServer = process.env.CCR_NTFY_SERVER;
+  if (process.env.CCR_NTFY_TOKEN) config.authToken = process.env.CCR_NTFY_TOKEN;
+  return config;
+}
+
 export function loadConfig(configPath = CONFIG_PATH) {
   try {
     const raw = fs.readFileSync(configPath, "utf-8");
@@ -42,10 +49,10 @@ export function loadConfig(configPath = CONFIG_PATH) {
     } else {
       config.notifications = { ...DEFAULT_CONFIG.notifications, ...config.notifications };
     }
-    return config;
+    return applyEnvOverrides(config);
   } catch (err) {
     if (err.code === "ENOENT") {
-      return { ...DEFAULT_CONFIG };
+      return applyEnvOverrides({ ...DEFAULT_CONFIG });
     }
     throw err;
   }

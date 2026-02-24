@@ -70,6 +70,7 @@ export async function main(args, deps) {
           message: "Test notification - if you see this, setup is working!",
           actions: [],
           requestId: "test",
+          authToken: config.authToken,
         });
         deps.stdout.write("Test notification sent successfully.\n");
       } catch (err) {
@@ -243,8 +244,12 @@ if (isMain) {
 
   const args = process.argv.slice(2);
 
+  // Only read stdin for commands that need it (hook, notify).
+  // Other commands (context, prompt, status, etc.) don't use stdin,
+  // and blocking on it causes hangs when run as a hook with no input piped.
+  const needsStdin = ["hook", "notify"].includes(args[0]);
   let stdinData = "";
-  if (!process.stdin.isTTY) {
+  if (needsStdin && !process.stdin.isTTY) {
     const chunks = [];
     for await (const chunk of process.stdin) {
       chunks.push(chunk);

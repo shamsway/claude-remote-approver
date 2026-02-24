@@ -103,13 +103,25 @@ describe("loadConfig", () => {
   /** Use a temp directory to isolate filesystem tests. */
   let tmpDir;
   let tmpConfigPath;
+  let savedEnv;
 
   before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-test-"));
     tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+    // Save and clear CCR_ env vars so they don't interfere with tests
+    savedEnv = {};
+    for (const key of ["CCR_NTFY_TOPIC", "CCR_NTFY_SERVER", "CCR_NTFY_TOKEN"]) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
   });
 
   after(() => {
+    // Restore env vars
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val !== undefined) process.env[key] = val;
+      else delete process.env[key];
+    }
     // Clean up temp directory
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -277,13 +289,23 @@ describe("loadConfig", () => {
 describe("saveConfig", () => {
   let tmpDir;
   let tmpConfigPath;
+  let savedEnv;
 
   before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-test-"));
     tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+    savedEnv = {};
+    for (const key of ["CCR_NTFY_TOPIC", "CCR_NTFY_SERVER", "CCR_NTFY_TOKEN"]) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
   });
 
   after(() => {
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val !== undefined) process.env[key] = val;
+      else delete process.env[key];
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
