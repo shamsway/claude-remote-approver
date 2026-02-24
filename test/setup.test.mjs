@@ -16,6 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks, registerNotificationHooks, getNotifyCommand, getContextCommand } from "../src/setup.mjs";
+import { DEFAULT_CONFIG } from "../src/config.mjs";
 
 // ===========================================================================
 // runSetup
@@ -785,6 +786,226 @@ describe("getContextCommand", () => {
   it("should contain cli.mjs in the path", () => {
     const cmd = getContextCommand();
     assert.ok(cmd.includes("cli.mjs"));
+  });
+});
+
+// ===========================================================================
+// runSetup - HTTPS enforcement
+// ===========================================================================
+
+describe("runSetup HTTPS enforcement", () => {
+  let tmpDir;
+  let tmpConfigPath;
+  let tmpSettingsPath;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-setup-https-test-"));
+    tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+    tmpSettingsPath = path.join(tmpDir, "settings.json");
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should reject http:// non-localhost server without allowInsecure", async () => {
+    await assert.rejects(
+      () => runSetup({
+        configPath: tmpConfigPath,
+        settingsPath: tmpSettingsPath,
+        generateTopic: () => "cra-insecure-reject",
+        saveConfig: () => {},
+        loadConfig: () => ({
+          ...DEFAULT_CONFIG,
+          ntfyServer: "http://ntfy.example.com",
+          allowInsecure: false,
+        }),
+      }),
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes("insecure"), `Expected error about insecure, got: ${err.message}`);
+        assert.ok(err.message.includes("http://ntfy.example.com"), `Expected error to mention the server, got: ${err.message}`);
+        return true;
+      }
+    );
+  });
+
+  it("should allow http:// non-localhost when allowInsecure is true", async () => {
+    let saveConfigCalled = false;
+    const result = await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath,
+      generateTopic: () => "cra-insecure-allow",
+      saveConfig: () => { saveConfigCalled = true; },
+      loadConfig: () => ({
+        ...DEFAULT_CONFIG,
+        ntfyServer: "http://ntfy.example.com",
+        allowInsecure: true,
+      }),
+    });
+    assert.equal(result.ntfyServer, "http://ntfy.example.com");
+    assert.ok(saveConfigCalled, "saveConfig should have been called");
+  });
+
+  it("should allow http://localhost without allowInsecure", async () => {
+    let saveConfigCalled = false;
+    const result = await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath,
+      generateTopic: () => "cra-localhost-allow",
+      saveConfig: () => { saveConfigCalled = true; },
+      loadConfig: () => ({
+        ...DEFAULT_CONFIG,
+        ntfyServer: "http://localhost:8080",
+        allowInsecure: false,
+      }),
+    });
+    assert.equal(result.ntfyServer, "http://localhost:8080");
+    assert.ok(saveConfigCalled, "saveConfig should have been called");
+  });
+
+  it("should allow https:// without allowInsecure", async () => {
+    let saveConfigCalled = false;
+    const result = await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath,
+      generateTopic: () => "cra-https-allow",
+      saveConfig: () => { saveConfigCalled = true; },
+      loadConfig: () => ({
+        ...DEFAULT_CONFIG,
+        ntfyServer: "https://ntfy.sh",
+        allowInsecure: false,
+      }),
+    });
+    assert.equal(result.ntfyServer, "https://ntfy.sh");
+    assert.ok(saveConfigCalled, "saveConfig should have been called");
+  });
+
+  it("should write a warning to stderr when http:// non-localhost with allowInsecure", async () => {
+    const stderrOutput = [];
+    const mockStderr = { write: (msg) => stderrOutput.push(msg) };
+
+    await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath,
+      generateTopic: () => "cra-insecure-warn",
+      saveConfig: () => {},
+      loadConfig: () => ({
+        ...DEFAULT_CONFIG,
+        ntfyServer: "http://ntfy.example.com",
+        allowInsecure: true,
+      }),
+      stderr: mockStderr,
+    });
+
+    assert.ok(stderrOutput.length > 0, "stderr should have received a warning");
+    assert.ok(
+      stderrOutput.some((msg) => msg.toLowerCase().includes("warning") || msg.toLowerCase().includes("insecure")),
+      `Expected a warning message, got: ${stderrOutput.join("")}`
+    );
+  });
+});
+
+// ===========================================================================
+// runSetup - token validation
+// ===========================================================================
+
+describe("runSetup token validation", () => {
+  let tmpDir;
+  let tmpConfigPath;
+  let tmpSettingsPath;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-setup-token-test-"));
+    tmpConfigPath = path.join(tmpDir, ".claude-remote-approver.json");
+    tmpSettingsPath = path.join(tmpDir, "settings.json");
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should reject setup when validateToken returns valid:false", async () => {
+    const failMessage = "token has insufficient permissions";
+    await assert.rejects(
+      () => runSetup({
+        configPath: tmpConfigPath,
+        settingsPath: tmpSettingsPath,
+        generateTopic: () => "cra-token-fail",
+        saveConfig: () => {},
+        loadConfig: () => ({
+          ...DEFAULT_CONFIG,
+          ntfyServer: "https://ntfy.sh",
+          authToken: "tk_badtoken",
+        }),
+        validateToken: async () => ({ valid: false, message: failMessage }),
+      }),
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes(failMessage),
+          `Expected error to include "${failMessage}", got: ${err.message}`
+        );
+        return true;
+      }
+    );
+  });
+
+  it("should proceed when validateToken returns valid:true", async () => {
+    let saveConfigCalled = false;
+    const result = await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath,
+      generateTopic: () => "cra-token-pass",
+      saveConfig: () => { saveConfigCalled = true; },
+      loadConfig: () => ({
+        ...DEFAULT_CONFIG,
+        ntfyServer: "https://ntfy.sh",
+        authToken: "tk_goodtoken",
+      }),
+      validateToken: async () => ({ valid: true, message: "ok" }),
+    });
+    assert.ok(saveConfigCalled, "saveConfig should have been called when token is valid");
+    assert.ok(result.topic, "should return a topic");
+  });
+
+  it("should skip validation when authToken is empty", async () => {
+    let validateTokenCalled = false;
+    let saveConfigCalled = false;
+    await runSetup({
+      configPath: tmpConfigPath,
+      settingsPath: tmpSettingsPath,
+      generateTopic: () => "cra-token-skip",
+      saveConfig: () => { saveConfigCalled = true; },
+      loadConfig: () => ({
+        ...DEFAULT_CONFIG,
+        ntfyServer: "https://ntfy.sh",
+        authToken: "",
+      }),
+      validateToken: async () => { validateTokenCalled = true; return { valid: true }; },
+    });
+    assert.ok(!validateTokenCalled, "validateToken should NOT be called when authToken is empty");
+    assert.ok(saveConfigCalled, "saveConfig should have been called");
+  });
+
+  it("should not call saveConfig when validation fails", async () => {
+    let saveConfigCalled = false;
+    await assert.rejects(
+      () => runSetup({
+        configPath: tmpConfigPath,
+        settingsPath: tmpSettingsPath,
+        generateTopic: () => "cra-token-nosave",
+        saveConfig: () => { saveConfigCalled = true; },
+        loadConfig: () => ({
+          ...DEFAULT_CONFIG,
+          ntfyServer: "https://ntfy.sh",
+          authToken: "tk_failtoken",
+        }),
+        validateToken: async () => ({ valid: false, message: "bad token" }),
+      }),
+      Error
+    );
+    assert.ok(!saveConfigCalled, "saveConfig should NOT be called when validation fails");
   });
 });
 

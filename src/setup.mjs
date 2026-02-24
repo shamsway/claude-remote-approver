@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isInsecureServer } from "./config.mjs";
 
 /**
  * Returns true if the entry belongs to claude-remote-approver.
@@ -219,11 +220,36 @@ export async function runSetup({
   generateTopic,
   saveConfig,
   loadConfig,
+  validateToken,
+  stderr,
 }) {
   const topic = generateTopic();
 
   const config = loadConfig(configPath);
   config.topic = topic;
+
+  // HTTPS enforcement
+  if (isInsecureServer(config.ntfyServer) && !config.allowInsecure) {
+    throw new Error(
+      `Refusing to use ${config.ntfyServer} — sending auth tokens over http:// is insecure. ` +
+      `Use --allow-insecure flag or set "allowInsecure": true in config to override.`
+    );
+  }
+  if (isInsecureServer(config.ntfyServer) && config.allowInsecure && stderr) {
+    stderr.write(`Warning: Using insecure http:// server ${config.ntfyServer}. Auth tokens will be sent in plaintext.\n`);
+  }
+
+  // Token validation
+  if (config.authToken && validateToken) {
+    const result = await validateToken(config.ntfyServer, config.topic, config.authToken);
+    if (!result.valid) {
+      throw new Error(
+        `Auth token validation failed: ${result.message}. ` +
+        `Check that the token is correct and the user has read-write access to cra-* topics.`
+      );
+    }
+  }
+
   saveConfig(config, configPath);
 
   const hookCommand = getHookCommand();
