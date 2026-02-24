@@ -747,6 +747,22 @@ describe("waitForResponse", () => {
 
     assert.equal(capturedOptions.headers, undefined);
   });
+
+  it("should return continue:true when response has continue flag", async () => {
+    const events = [
+      { type: "message", message: JSON.stringify({ requestId: "req-cont", continue: true }) },
+    ];
+    const mockFetch = createStreamingMockFetch(events);
+    globalThis.fetch = mockFetch;
+
+    const result = await waitForResponse({
+      server: "https://ntfy.sh",
+      topic: "my-topic",
+      requestId: "req-cont",
+      timeout: 5000,
+    });
+    assert.deepEqual(result, { continue: true });
+  });
 });
 
 // ---------------------------------------------------------------------------
