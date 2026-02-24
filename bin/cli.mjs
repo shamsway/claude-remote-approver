@@ -127,7 +127,7 @@ export async function main(args, deps) {
 
     case "uninstall": {
       try {
-        deps.unregisterHook(deps.settingsPath);
+        deps.unregisterAllHooks(deps.settingsPath);
       } catch (err) {
         deps.stderr.write(`Error: Failed to remove hook: ${err.message}\n`);
         break;
@@ -146,7 +146,7 @@ export async function main(args, deps) {
 
     case "disable": {
       try {
-        deps.unregisterHook(deps.settingsPath);
+        deps.unregisterAllHooks(deps.settingsPath);
       } catch (err) {
         deps.stderr.write(`Error: Failed to disable hook: ${err.message}\n`);
         break;
@@ -239,7 +239,7 @@ if (isMain) {
   const { processHook } = await import("../src/hook.mjs");
   const { processNotify } = await import("../src/notify.mjs");
   const { generateContext } = await import("../src/context.mjs");
-  const { runSetup, registerHook, getHookCommand, unregisterHook } = await import("../src/setup.mjs");
+  const { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks } = await import("../src/setup.mjs");
 
   const args = process.argv.slice(2);
 
@@ -266,6 +266,7 @@ if (isMain) {
     registerHook,
     getHookCommand,
     unregisterHook,
+    unregisterAllHooks,
     version: pkg.version,
     generateQR: (text, opts, cb) => qrcode.generate(text, opts, cb),
     unlinkSync: fs.unlinkSync,

@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runSetup, registerHook, getHookCommand, unregisterHook, registerNotificationHooks, getNotifyCommand, getContextCommand } from "../src/setup.mjs";
+import { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks, registerNotificationHooks, getNotifyCommand, getContextCommand } from "../src/setup.mjs";
 
 // ===========================================================================
 // runSetup
@@ -610,6 +610,77 @@ describe("unregisterHook", () => {
 
     const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
     assert.equal(settings.hooks, undefined, "hooks key should be removed after clearing legacy flat entry");
+  });
+});
+
+// ===========================================================================
+// unregisterAllHooks
+// ===========================================================================
+
+describe("unregisterAllHooks", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cra-unregall-test-"));
+  });
+
+  after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should remove CRA entries from all hook event types", () => {
+    const settingsPath = path.join(tmpDir, "unregister-all.json");
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      hooks: {
+        PermissionRequest: [
+          { hooks: [{ type: "command", command: "node /path/claude-remote-approver/bin/cli.mjs hook" }] },
+        ],
+        Notification: [
+          { hooks: [{ type: "command", command: "node /path/claude-remote-approver/bin/cli.mjs notify" }] },
+        ],
+        Stop: [
+          { hooks: [{ type: "command", command: "echo other" }] },
+          { hooks: [{ type: "command", command: "node /path/claude-remote-approver/bin/cli.mjs notify" }] },
+        ],
+        SessionStart: [
+          { hooks: [{ type: "command", command: "node /path/claude-remote-approver/bin/cli.mjs context" }] },
+        ],
+      },
+    }, null, 2));
+
+    unregisterAllHooks(settingsPath);
+
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(settings.hooks.PermissionRequest, undefined);
+    assert.equal(settings.hooks.Notification, undefined);
+    assert.equal(settings.hooks.SessionStart, undefined);
+    assert.equal(settings.hooks.Stop.length, 1);
+    assert.equal(settings.hooks.Stop[0].hooks[0].command, "echo other");
+  });
+
+  it("should do nothing when settings file does not exist", () => {
+    const settingsPath = path.join(tmpDir, "nonexistent-unregall.json");
+    assert.doesNotThrow(() => {
+      unregisterAllHooks(settingsPath);
+    });
+  });
+
+  it("should delete hooks key when all events are cleaned up", () => {
+    const settingsPath = path.join(tmpDir, "unregall-clean.json");
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      autoUpdaterStatus: "disabled",
+      hooks: {
+        PermissionRequest: [
+          { hooks: [{ type: "command", command: "node /path/claude-remote-approver/bin/cli.mjs hook" }] },
+        ],
+      },
+    }, null, 2));
+
+    unregisterAllHooks(settingsPath);
+
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    assert.equal(settings.hooks, undefined);
+    assert.equal(settings.autoUpdaterStatus, "disabled");
   });
 });
 

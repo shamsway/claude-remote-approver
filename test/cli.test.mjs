@@ -92,6 +92,7 @@ function createDeps(overrides = {}) {
           settingsPath: "/home/user/.claude/settings.json",
         },
     ),
+    unregisterAllHooks: mock.fn(() => {}),
     version: overrides.version ?? pkg.version,
     generateQR: overrides.generateQR ?? mock.fn((text, opts, cb) => cb("")),
     stdout: overrides.stdout ?? createMockWriter(),
@@ -613,9 +614,9 @@ describe("main", () => {
   // =========================================================================
 
   describe("uninstall subcommand", () => {
-    it("should call unregisterHook with settingsPath", async () => {
+    it("should call unregisterAllHooks with settingsPath", async () => {
       const deps = createDeps({
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {}),
         configPath: "/fake/config.json",
@@ -624,20 +625,20 @@ describe("main", () => {
       await main(["uninstall"], deps);
 
       assert.equal(
-        deps.unregisterHook.mock.callCount(),
+        deps.unregisterAllHooks.mock.callCount(),
         1,
-        "unregisterHook should be called exactly once",
+        "unregisterAllHooks should be called exactly once",
       );
       assert.equal(
-        deps.unregisterHook.mock.calls[0].arguments[0],
+        deps.unregisterAllHooks.mock.calls[0].arguments[0],
         "/fake/settings.json",
-        "unregisterHook should be called with settingsPath",
+        "unregisterAllHooks should be called with settingsPath",
       );
     });
 
     it("should delete config file via unlinkSync", async () => {
       const deps = createDeps({
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {}),
         configPath: "/fake/config.json",
@@ -659,7 +660,7 @@ describe("main", () => {
 
     it("should ignore ENOENT when config file does not exist", async () => {
       const deps = createDeps({
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {
           const err = new Error("ENOENT");
@@ -679,7 +680,7 @@ describe("main", () => {
       const stdout = createMockWriter();
       const deps = createDeps({
         stdout,
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {}),
         configPath: "/fake/config.json",
@@ -704,9 +705,9 @@ describe("main", () => {
   // =========================================================================
 
   describe("disable subcommand", () => {
-    it("should call unregisterHook with settingsPath", async () => {
+    it("should call unregisterAllHooks with settingsPath", async () => {
       const deps = createDeps({
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {}),
         configPath: "/fake/config.json",
@@ -715,20 +716,20 @@ describe("main", () => {
       await main(["disable"], deps);
 
       assert.equal(
-        deps.unregisterHook.mock.callCount(),
+        deps.unregisterAllHooks.mock.callCount(),
         1,
-        "unregisterHook should be called exactly once",
+        "unregisterAllHooks should be called exactly once",
       );
       assert.equal(
-        deps.unregisterHook.mock.calls[0].arguments[0],
+        deps.unregisterAllHooks.mock.calls[0].arguments[0],
         "/fake/settings.json",
-        "unregisterHook should be called with settingsPath",
+        "unregisterAllHooks should be called with settingsPath",
       );
     });
 
     it("should NOT delete config file", async () => {
       const deps = createDeps({
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {}),
         configPath: "/fake/config.json",
@@ -747,7 +748,7 @@ describe("main", () => {
       const stdout = createMockWriter();
       const deps = createDeps({
         stdout,
-        unregisterHook: mock.fn(() => {}),
+        unregisterAllHooks: mock.fn(() => {}),
         settingsPath: "/fake/settings.json",
         unlinkSync: mock.fn(() => {}),
         configPath: "/fake/config.json",

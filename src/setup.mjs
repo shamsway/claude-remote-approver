@@ -138,6 +138,40 @@ export function registerHook(settingsPath, hookCommand) {
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
+const ALL_HOOK_EVENTS = ["PermissionRequest", "Notification", "Stop", "SessionStart", "SessionEnd", "PostToolUseFailure", "SubagentStop"];
+
+/**
+ * Removes CRA entries from ALL hook event types in Claude's settings.json.
+ * If the file does not exist, does nothing.
+ */
+export function unregisterAllHooks(settingsPath) {
+  let settings;
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+
+  if (!settings.hooks) return;
+
+  for (const event of ALL_HOOK_EVENTS) {
+    if (!settings.hooks[event]) continue;
+    const filtered = settings.hooks[event].filter((entry) => !isCraEntry(entry));
+    if (filtered.length === 0) {
+      delete settings.hooks[event];
+    } else {
+      settings.hooks[event] = filtered;
+    }
+  }
+
+  if (Object.keys(settings.hooks).length === 0) {
+    delete settings.hooks;
+  }
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+}
+
 /**
  * Removes the claude-remote-approver hook entry from Claude's settings.json.
  * If the file does not exist, does nothing.
