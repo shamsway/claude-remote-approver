@@ -199,6 +199,25 @@ export async function main(args, deps) {
       break;
     }
 
+    case "stop": {
+      let input;
+      try {
+        input = JSON.parse(deps.stdin);
+      } catch {
+        deps.stderr.write("[claude-remote-approver] Invalid stop input.\n");
+        break;
+      }
+      try {
+        const result = await deps.processStop(input, deps);
+        if (result !== null) {
+          deps.stdout.write(JSON.stringify(result) + "\n");
+        }
+      } catch (err) {
+        deps.stderr.write(`[claude-remote-approver] Stop processing failed: ${err.message}\n`);
+      }
+      break;
+    }
+
     case "context": {
       const config = deps.loadConfig();
       const result = deps.generateContext(config);
@@ -249,6 +268,7 @@ if (isMain) {
   );
   const { processHook } = await import("../src/hook.mjs");
   const { processNotify } = await import("../src/notify.mjs");
+  const { processStop } = await import("../src/stop.mjs");
   const { generateContext } = await import("../src/context.mjs");
   const { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks } = await import("../src/setup.mjs");
 
@@ -257,7 +277,7 @@ if (isMain) {
   // Only read stdin for commands that need it (hook, notify).
   // Other commands (context, prompt, status, etc.) don't use stdin,
   // and blocking on it causes hangs when run as a hook with no input piped.
-  const needsStdin = ["hook", "notify"].includes(args[0]);
+  const needsStdin = ["hook", "notify", "stop"].includes(args[0]);
   let stdinData = "";
   if (needsStdin && !process.stdin.isTTY) {
     const chunks = [];
@@ -277,6 +297,7 @@ if (isMain) {
     validateToken,
     processHook,
     processNotify,
+    processStop,
     generateContext,
     runSetup,
     registerHook,

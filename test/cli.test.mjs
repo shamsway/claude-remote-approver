@@ -80,6 +80,7 @@ function createDeps(overrides = {}) {
         },
     ),
     processNotify: mock.fn(async () => {}),
+    processStop: mock.fn(async () => null),
     generateContext: mock.fn(() => ({
       hookSpecificOutput: { additionalContext: "Remote approval context..." },
     })),
@@ -1010,6 +1011,79 @@ describe("main", () => {
       await assert.doesNotReject(async () => {
         await main(["notify"], deps);
       });
+    });
+  });
+
+  // =========================================================================
+  // stop subcommand
+  // =========================================================================
+
+  describe("stop subcommand", () => {
+    it("should parse stdin JSON and call processStop", async () => {
+      const stopInput = { hook_event_name: "Stop", session_id: "abc123" };
+      const processStop = mock.fn(async () => null);
+      const deps = createDeps({
+        stdin: JSON.stringify(stopInput),
+        processStop,
+      });
+
+      await main(["stop"], deps);
+
+      assert.equal(processStop.mock.callCount(), 1, "processStop should be called exactly once");
+      const callArgs = processStop.mock.calls[0].arguments[0];
+      assert.equal(callArgs.hook_event_name, "Stop");
+      assert.equal(callArgs.session_id, "abc123");
+    });
+
+    it("should write JSON result to stdout when processStop returns non-null", async () => {
+      const stdout = createMockWriter();
+      const stopResult = { decision: "block", reason: "User requested continuation" };
+      const deps = createDeps({
+        stdin: JSON.stringify({ hook_event_name: "Stop" }),
+        stdout,
+        processStop: mock.fn(async () => stopResult),
+      });
+
+      await main(["stop"], deps);
+
+      const output = stdout.output();
+      assert.ok(output.length > 0, "stdout should have output when processStop returns non-null");
+      assert.ok(output.endsWith("\n"), "output should end with a newline");
+      const parsed = JSON.parse(output);
+      assert.equal(parsed.decision, "block");
+      assert.equal(parsed.reason, "User requested continuation");
+    });
+
+    it("should write nothing to stdout when processStop returns null", async () => {
+      const stdout = createMockWriter();
+      const deps = createDeps({
+        stdin: JSON.stringify({ hook_event_name: "Stop" }),
+        stdout,
+        processStop: mock.fn(async () => null),
+      });
+
+      await main(["stop"], deps);
+
+      assert.equal(stdout.output(), "", "stdout should be empty when processStop returns null");
+    });
+
+    it("should write error to stderr and not call processStop when stdin is invalid JSON", async () => {
+      const stderr = createMockWriter();
+      const processStop = mock.fn(async () => null);
+      const deps = createDeps({
+        stdin: "not-valid-json{{{",
+        stderr,
+        processStop,
+      });
+
+      await main(["stop"], deps);
+
+      const errOutput = stderr.output();
+      assert.ok(
+        errOutput.includes("[claude-remote-approver]") && errOutput.includes("Invalid stop input"),
+        `stderr should contain prefixed error message, got: ${errOutput}`,
+      );
+      assert.equal(processStop.mock.callCount(), 0, "processStop should NOT be called when JSON parsing fails");
     });
   });
 
