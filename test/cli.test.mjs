@@ -874,15 +874,20 @@ describe("main", () => {
   // =========================================================================
 
   describe("enable subcommand", () => {
-    it("should call loadConfig and registerHook when topic is configured", async () => {
+    it("should call registerHook and registerNotificationHooks when topic is configured", async () => {
       const deps = createDeps({
         loadConfig: mock.fn(() => ({
           topic: "cra-abc123",
           ntfyServer: "https://ntfy.sh",
           timeout: 120,
+          notifications: { idle: true, stop: true, toolFailure: true },
         })),
         registerHook: mock.fn(() => {}),
+        registerNotificationHooks: mock.fn(() => {}),
         getHookCommand: mock.fn(() => "node /path/hook.mjs"),
+        getNotifyCommand: mock.fn(() => "node /path/notify.mjs"),
+        getContextCommand: mock.fn(() => "node /path/context.mjs"),
+        getStopCommand: mock.fn(() => "node /path/stop.mjs"),
         settingsPath: "/fake/settings.json",
       });
 
@@ -903,6 +908,18 @@ describe("main", () => {
         "node /path/hook.mjs",
         "registerHook second arg should be the hook command",
       );
+
+      assert.equal(
+        deps.registerNotificationHooks.mock.callCount(),
+        1,
+        "registerNotificationHooks should be called exactly once",
+      );
+      const rnhArgs = deps.registerNotificationHooks.mock.calls[0].arguments;
+      assert.equal(rnhArgs[0], "/fake/settings.json", "first arg should be settingsPath");
+      assert.equal(rnhArgs[1], "node /path/notify.mjs", "second arg should be notify command");
+      assert.deepEqual(rnhArgs[2], { idle: true, stop: true, toolFailure: true }, "third arg should be notifications config");
+      assert.equal(rnhArgs[3], "node /path/context.mjs", "fourth arg should be context command");
+      assert.equal(rnhArgs[4], "node /path/stop.mjs", "fifth arg should be stop command");
     });
 
     it("should write error to stderr when no topic is configured", async () => {
@@ -917,7 +934,11 @@ describe("main", () => {
           timeout: 120,
         })),
         registerHook: mock.fn(() => {}),
+        registerNotificationHooks: mock.fn(() => {}),
         getHookCommand: mock.fn(() => "node /path/hook.mjs"),
+        getNotifyCommand: mock.fn(() => "node /path/notify.mjs"),
+        getContextCommand: mock.fn(() => "node /path/context.mjs"),
+        getStopCommand: mock.fn(() => "node /path/stop.mjs"),
         settingsPath: "/fake/settings.json",
       });
 
@@ -944,9 +965,14 @@ describe("main", () => {
           topic: "cra-abc123",
           ntfyServer: "https://ntfy.sh",
           timeout: 120,
+          notifications: { idle: true },
         })),
         registerHook: mock.fn(() => {}),
+        registerNotificationHooks: mock.fn(() => {}),
         getHookCommand: mock.fn(() => "node /path/hook.mjs"),
+        getNotifyCommand: mock.fn(() => "node /path/notify.mjs"),
+        getContextCommand: mock.fn(() => "node /path/context.mjs"),
+        getStopCommand: mock.fn(() => "node /path/stop.mjs"),
         settingsPath: "/fake/settings.json",
       });
 

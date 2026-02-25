@@ -179,6 +179,13 @@ export async function main(args, deps) {
       }
       try {
         deps.registerHook(deps.settingsPath, deps.getHookCommand());
+        deps.registerNotificationHooks(
+          deps.settingsPath,
+          deps.getNotifyCommand(),
+          config.notifications || {},
+          deps.getContextCommand(),
+          deps.getStopCommand(),
+        );
       } catch (err) {
         deps.stderr.write(`Error: Failed to enable hook: ${err.message}\n`);
         break;
@@ -274,7 +281,7 @@ if (isMain) {
   const { processNotify } = await import("../src/notify.mjs");
   const { processStop } = await import("../src/stop.mjs");
   const { generateContext } = await import("../src/context.mjs");
-  const { runSetup, registerHook, getHookCommand, unregisterHook, unregisterAllHooks } = await import("../src/setup.mjs");
+  const { runSetup, registerHook, registerNotificationHooks, getHookCommand, getNotifyCommand, getContextCommand, getStopCommand, unregisterHook, unregisterAllHooks } = await import("../src/setup.mjs");
 
   const args = process.argv.slice(2);
 
@@ -305,7 +312,11 @@ if (isMain) {
     generateContext,
     runSetup,
     registerHook,
+    registerNotificationHooks,
     getHookCommand,
+    getNotifyCommand,
+    getContextCommand,
+    getStopCommand,
     unregisterHook,
     unregisterAllHooks,
     version: pkg.version,
