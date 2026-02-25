@@ -1,10 +1,10 @@
 # PRD: Expanded Notification & Interaction Support
 
-## Status: Phases 1-3 Complete (Rev 3)
+## Status: Phases 1-4 Complete (Rev 4)
 ## Author: Generated from codebase analysis + research
-## Date: 2026-02-24 (updated 2026-02-24)
+## Date: 2026-02-24 (updated 2026-02-25)
 ## Primary deployment target: Self-hosted ntfy
-## Current version: v0.7.0 (branch: add-notifications)
+## Current version: v0.8.0 (branch: add-notifications)
 
 ---
 
@@ -130,15 +130,15 @@ Added `authToken` field plus `CCR_NTFY_TOPIC`, `CCR_NTFY_SERVER`, `CCR_NTFY_TOKE
 
 When `authToken` is present, all three call sites inject it. When absent, behavior is unchanged (unauthenticated, compatible with ntfy.sh cloud).
 
-### 4.7 Setup Flow Changes ⏳ PARTIAL
+### 4.7 Setup Flow Changes ✅ MOSTLY COMPLETE
 
-The `setup` command currently uses env vars or config file for auth. The following interactive setup enhancements are NOT yet implemented:
+The `setup` command now includes HTTPS enforcement and token validation:
 
 1. ~~Prompt for ntfy server URL~~ (uses config/env vars)
 2. **TODO**: Interactive auth token prompt during setup
-3. **TODO**: Validate the token by attempting a publish + subscribe round-trip to a test topic
-4. **TODO**: If validation fails, show the error and suggest checking the token and server ACLs
-5. **TODO**: If the server URL is `http://` (not HTTPS, not localhost), warn/refuse with config override
+3. ✅ Validate the token by attempting a publish to the topic (returns error on 401/403)
+4. ✅ If validation fails, show the error and suggest checking the token and server ACLs; config is not saved
+5. ✅ If the server URL is `http://` (not HTTPS, not localhost), refuse with `--allow-insecure` flag or `allowInsecure` config override
 
 ### 4.8 Recommended Server-Side ACL Setup
 
@@ -198,13 +198,14 @@ function buildActions(server, topic, requestId, { permissionSuggestions, authTok
 }
 ```
 
-### 4.10 Testing ✅ (partial)
+### 4.10 Testing ✅ COMPLETE
 
 - ✅ Test that `authToken` is included in fetch headers for publish and subscribe
 - ✅ Test that `authToken` is included in action button definitions when present
 - ✅ Test that no auth headers are sent when `authToken` is absent (backward compat)
-- ⏳ Test setup validation round-trip (mock fetch for success/401 scenarios) — NOT YET (setup validation not implemented)
-- ⏳ Test `http://` non-localhost warning — NOT YET (HTTPS enforcement not implemented)
+- ✅ Test `validateToken` success/401/403/network error scenarios
+- ✅ Test `http://` non-localhost refusal, localhost/https allowed, `allowInsecure` override, `--allow-insecure` flag
+- ✅ Test `runSetup` aborts before saving config on validation failure or HTTPS refusal
 
 ---
 
@@ -329,17 +330,17 @@ For notification-only messages, leverage additional ntfy.sh features not current
 - **`markdown`**: Enable for tool failure messages that may contain code
 - **`click`**: Could link to the Claude Code web UI or relevant docs (stretch goal)
 
-### 5.8 `Stop` Hook: "Continue" Action ⏳ NOT YET IMPLEMENTED
+### 5.8 `Stop` Hook: "Continue" Action ✅ COMPLETE
 
-The `Stop` hook is special — it supports blocking. When Claude finishes, the notification could include a single action button:
+The `Stop` hook supports blocking via an optional "Continue" button:
 
 | Action | Behavior |
 |---|---|
 | **"Continue"** | Returns `{ "decision": "block", "reason": "User requested continuation" }` which forces Claude to keep going |
 
-This transforms the "Claude finished" notification into an optional remote "keep going" prompt. To avoid blocking Claude indefinitely, use a short timeout (15-30s). On timeout, exit 0 with no output (allow stop).
+Implementation: New `src/stop.mjs` module with `processStop()` and `buildContinueAction()`. New `stop` CLI command in `bin/cli.mjs`. When `stopWithContinue` is enabled, `registerNotificationHooks` registers the Stop hook with the interactive `stop` command instead of the fire-and-forget `notify` command.
 
-This should be a separate config flag (`notifications.stopWithContinue: false` default) since it changes the `Stop` hook from fire-and-forget to interactive with a timeout.
+Timeout uses `config.continueTimeout` (default 120s, matching `timeout`). On timeout, exits 0 with no output (Claude proceeds with stop). Config flag: `notifications.stopWithContinue: false` (default). Context injection in `src/context.mjs` mentions the Continue button when enabled.
 
 ---
 
@@ -523,13 +524,14 @@ ntfy.sh renders emoji shortcodes as icons in the notification list. Use consiste
 ### 8.1 Module Changes
 
 ```
-bin/cli.mjs           — Add "notify", "context", "prompt" command routing
-src/config.mjs        — Extend config schema with authToken, notifications settings
-src/ntfy.mjs          — Add formatNotification(), priority/tags/auth support in sendNotification()
+bin/cli.mjs           — Add "notify", "context", "prompt", "stop" command routing; --allow-insecure flag
+src/config.mjs        — Extend config schema with authToken, notifications, continueTimeout, allowInsecure; add isInsecureServer()
+src/ntfy.mjs          — Add priority/tags/auth support in sendNotification(); add validateToken(); add continue support in waitForResponse()
 src/hook.mjs          — Thread authToken, multi-select, multi-question, "Use CLI" button
 src/notify.mjs (NEW)  — processNotify() for fire-and-forget notifications
-src/context.mjs (NEW) — generateContext() for SessionStart hook injection
-src/setup.mjs         — Auth prompts, register multiple hook events, notification config
+src/context.mjs (NEW) — generateContext() for SessionStart hook injection; dynamic Continue button mention
+src/stop.mjs (NEW)    — processStop() and buildContinueAction() for interactive Stop hook
+src/setup.mjs         — Register multiple hook events; getStopCommand(); HTTPS enforcement; token validation in runSetup
 ```
 
 ### 8.2 sendNotification() Changes
@@ -568,6 +570,8 @@ When loading config, apply defaults for new fields so existing installations kee
 ```javascript
 const DEFAULT_CONFIG = {
   // ... existing fields ...
+  continueTimeout: 120,
+  allowInsecure: false,
   notifications: {
     idle: true,
     stop: true,
@@ -580,16 +584,15 @@ const DEFAULT_CONFIG = {
 };
 ```
 
-### 8.5 Hook Registration Changes
+### 8.5 Hook Registration Changes ✅ COMPLETE
 
-`registerHook` currently writes a single `PermissionRequest` entry. It needs to:
+`registerNotificationHooks` handles all hook types:
 
-1. Write entries for each enabled notification hook event
-2. Remove entries for disabled notification hook events
-3. Preserve entries it doesn't manage (other user hooks)
-4. Use the `notify` subcommand for non-interactive hooks
-
-The registration function should accept a config object and derive the full hook set.
+1. ✅ Writes entries for each enabled notification hook event
+2. ✅ Preserves entries it doesn't manage (other user hooks)
+3. ✅ Uses the `notify` subcommand for non-interactive hooks
+4. ✅ Uses the `stop` subcommand for Stop when `stopWithContinue` is enabled
+5. ✅ `unregisterAllHooks` cleans all CRA entries from all hook event types
 
 ---
 
@@ -700,11 +703,17 @@ function createMultiEventSSEStream(events) {
 - ✅ Markdown preview content in question notifications
 - ⏳ Smarter option batching with navigation labels ("Options 1-3 of 7") — deferred
 
-### Phase 4: Multi-Select & Continue ⏳ NOT STARTED
-- Multi-select answer accumulation in `waitForResponse()`
-- Confirmation notifications showing current selections
-- "Continue" button on Stop notifications (`stopWithContinue` config)
-- Ship as v0.8.0
+### Phase 4: Continue Button & Setup Improvements ✅ SHIPPED (v0.8.0)
+- ✅ "Continue" button on Stop notifications (`stopWithContinue` config)
+- ✅ New `src/stop.mjs` with `processStop()` and `buildContinueAction()`
+- ✅ New `stop` CLI command, conditional hook registration (stop vs notify)
+- ✅ `continueTimeout` config field with `CCR_CONTINUE_TIMEOUT` env override
+- ✅ Context injection mentions Continue button when enabled
+- ✅ HTTPS enforcement in setup (`isInsecureServer`, `--allow-insecure` flag, `allowInsecure` config)
+- ✅ Token validation in setup (`validateToken` publish-only test, abort on failure)
+- ✅ Status command shows "Stop + Continue" and `continueTimeout`
+- ⏳ Multi-select answer accumulation — deferred to Phase 5
+- ⏳ Interactive auth token prompt during setup — deferred
 
 ---
 
