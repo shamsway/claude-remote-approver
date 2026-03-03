@@ -88,11 +88,11 @@ describe("DEFAULT_CONFIG", () => {
 
   it("should have notifications as an object with correct defaults", () => {
     assert.equal(typeof DEFAULT_CONFIG.notifications, "object");
-    assert.equal(DEFAULT_CONFIG.notifications.idle, true);
+    assert.equal(DEFAULT_CONFIG.notifications.idle, false);
     assert.equal(DEFAULT_CONFIG.notifications.stop, true);
     assert.equal(DEFAULT_CONFIG.notifications.sessionStart, false);
     assert.equal(DEFAULT_CONFIG.notifications.sessionEnd, false);
-    assert.equal(DEFAULT_CONFIG.notifications.toolFailure, true);
+    assert.equal(DEFAULT_CONFIG.notifications.toolFailure, false);
     assert.equal(DEFAULT_CONFIG.notifications.subagentStop, false);
     assert.equal(DEFAULT_CONFIG.notifications.stopWithContinue, false);
   });
@@ -146,11 +146,11 @@ describe("loadConfig", () => {
       autoApprove: [],
       autoDeny: [],
       notifications: {
-        idle: true,
+        idle: false,
         stop: true,
         sessionStart: false,
         sessionEnd: false,
-        toolFailure: true,
+        toolFailure: false,
         subagentStop: false,
         stopWithContinue: false,
       },

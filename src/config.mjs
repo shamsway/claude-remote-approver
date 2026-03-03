@@ -17,11 +17,11 @@ export const DEFAULT_CONFIG = {
   autoApprove: [],
   autoDeny: [],
   notifications: {
-    idle: true,
+    idle: false,
     stop: true,
     sessionStart: false,
     sessionEnd: false,
-    toolFailure: true,
+    toolFailure: false,
     subagentStop: false,
     stopWithContinue: false,
   },
